@@ -83,9 +83,20 @@ The options page reads and writes the same validated storage model as the side p
 The classifier is exposed behind one purposeful boundary:
 
 ```ts
+interface ClassificationItem {
+  itemId: string;
+  metadata: VideoMetadata;
+}
+
+interface ClassificationResult {
+  itemId: string;
+  ruleId: string;
+  reason: string;
+}
+
 interface VideoClassifier {
   classify(
-    videos: VideoMetadata[],
+    items: ClassificationItem[],
     rules: GroupRule[],
     fallbackRuleId: string,
   ): Promise<ClassificationResult[]>;
