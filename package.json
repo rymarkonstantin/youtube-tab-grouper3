@@ -1,0 +1,26 @@
+{
+  "name": "youtube-tab-grouper3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:dist": "node scripts/check-dist.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run format:check && npm run lint && npm test && npm run typecheck && npm run build && npm run check:dist"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@types/chrome": "^0.2.7",
+    "@types/dom-chromium-ai": "^0.0.17",
+    "@types/node": "^26.4.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

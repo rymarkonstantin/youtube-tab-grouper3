@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Tab Grouper 3",
+  "description": "Semantically group YouTube video tabs in the current window using Chrome's built-in AI.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "138",
+  "permissions": ["scripting", "sidePanel", "storage", "tabGroups"],
+  "host_permissions": ["https://*.youtube.com/*", "https://youtu.be/*"],
+  "incognito": "not_allowed",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "options_page": "options.html",
+  "action": { "default_title": "Group YouTube tabs" }
+}
