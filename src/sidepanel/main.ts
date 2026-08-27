@@ -93,6 +93,7 @@ async function startRun(): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
   currentRun = { controller };
+  beginTimer();
   diagnosticsEnabled = false;
   lastDiagnostics = undefined;
   renderDiagnosticsCopyAction();
@@ -181,6 +182,7 @@ async function startRun(): Promise<void> {
         kind: "error",
         message: error instanceof Error ? error.message : "Unexpected error.",
       });
+    endTimer();
   } finally {
     currentRun = undefined;
   }
@@ -214,6 +216,7 @@ export function initializeSidePanel(): void {
     "pagehide",
     () => {
       currentRun?.controller.abort();
+      disposeTimer();
       lastDiagnostics = undefined;
       renderDiagnosticsCopyAction();
     },
