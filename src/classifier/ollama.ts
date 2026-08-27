@@ -10,6 +10,7 @@ import {
 } from "./response";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_BATCH_ITEMS = 4;
 
 export type OllamaProviderErrorCode =
   | "unavailable"
@@ -88,6 +89,22 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
   }
 
   async classify(input: ClassifierInput, signal: AbortSignal): Promise<ClassificationResult[]> {
+    const results: ClassificationResult[] = [];
+    for (let index = 0; index < input.items.length; index += MAX_BATCH_ITEMS) {
+      const batch = input.items.slice(index, index + MAX_BATCH_ITEMS);
+      results.push(...(await this.classifyBatch({ ...input, items: batch }, signal)));
+    }
+    const byId = new Map(results.map((result) => [result.itemId, result]));
+    return input.items.flatMap(({ itemId }) => {
+      const result = byId.get(itemId);
+      return result ? [result] : [];
+    });
+  }
+
+  private async classifyBatch(
+    input: ClassifierInput,
+    signal: AbortSignal,
+  ): Promise<ClassificationResult[]> {
     const enabledRules = input.rules.filter(({ enabled }) => enabled);
     const itemIds = input.items.map(({ itemId }) => itemId);
     const enabledRuleIds = enabledRules.map(({ id }) => id);
