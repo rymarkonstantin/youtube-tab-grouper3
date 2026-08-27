@@ -23,6 +23,22 @@
 - Turbo mode changes prompt transport limits only. It does not alter taxonomy, enable concurrency, or add a keyword classifier.
 - Keep development version `0.2.0`; use `0.2.1` only when packaging these fixes for distribution.
 
+## Bundle Delivery
+
+This addendum is delivered as three sequential bundles. Each bundle starts from the newly merged
+`main`, uses one dedicated branch and one pull request, passes review and `npm run validate`, and
+must be merged before the next bundle starts.
+
+| Bundle | Branch | Tasks | Scope |
+|---|---|---|---|
+| 7 — Performance foundation | `bundle/07-performance-foundation` | 1–2 | Configuration migration, Turbo prompts, cache fingerprint, optional reasons, response parsing |
+| 8 — Provider scheduling | `bundle/08-provider-scheduling` | 3–4 | Bounded concurrency, timeout splitting, partial recovery, Ollama/remote integration |
+| 9 — UX and release | `bundle/09-performance-release` | 5–6 | Diagnostics, progress/options UI, documentation, release validation |
+
+Only one bundle branch and pull request may be active at a time. The first bundle branch may carry
+the already completed local Task 1–2 commits, but no bundle work is considered complete until its
+pull request is merged into `main`.
+
 ---
 
 ### Task 1: Configuration migration, cache fingerprint, and prompt modes
@@ -99,4 +115,11 @@
 
 ## Completion Gate
 
-After each task passes focused tests and review, run the complete validation gate before starting the next task. Use one feature branch and one pull request into `main`; do not stack work on an unmerged branch. Before merge, verify local-only classification, Turbo off/on behavior, concurrency `1` and `8`, recursive timeout splitting, partial-response recovery, multilingual metadata, cache reuse/invalidation, cancellation, missing Ollama/model, remote fallback, diagnostics redaction, and deterministic grouping. After merge, synchronize `main`, rerun `npm run validate`, mark the addendum implemented, and decide whether to package `0.2.1`.
+Within each bundle, complete tasks sequentially with focused tests and review. At every bundle
+boundary, run the complete validation gate, open exactly one pull request, wait for review/checks,
+merge it into `main`, synchronize local `main`, and rerun `npm run validate` before opening the next
+bundle. Before the final bundle merge, verify local-only classification, Turbo off/on behavior,
+concurrency `1` and `8`, recursive timeout splitting, partial-response recovery, multilingual
+metadata, cache reuse/invalidation, cancellation, missing Ollama/model, remote fallback,
+diagnostics redaction, and deterministic grouping. After Bundle 9 merges, mark the addendum
+implemented and decide whether to package `0.2.1`.
