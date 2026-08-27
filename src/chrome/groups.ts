@@ -43,7 +43,11 @@ export class ChromeGroupsAdapter implements GroupsPort {
   groupTabs(input: GroupTabsInput): Promise<number> {
     if (input.tabIds.length === 0)
       return Promise.reject(new Error("Cannot group an empty tab list."));
-    return this.api.tabs.group({ ...input, tabIds: input.tabIds as [number, ...number[]] });
+    const options =
+      input.groupId === undefined
+        ? { tabIds: input.tabIds as [number, ...number[]] }
+        : { tabIds: input.tabIds as [number, ...number[]], groupId: input.groupId };
+    return this.api.tabs.group(options);
   }
   async updateGroup(groupId: number, input: { title: string; color: GroupColor }): Promise<void> {
     await this.api.tabGroups.update(groupId, input);
