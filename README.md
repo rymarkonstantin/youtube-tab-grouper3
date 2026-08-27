@@ -1,5 +1,17 @@
 # YouTube Tab Grouper 3
 
+## Versioning and releases
+
+The extension and package use synchronized three-part Semantic Versioning. `PATCH` is for
+backward-compatible bug fixes, diagnostics, performance work, or small UI corrections. `MINOR`
+is for new backward-compatible user-visible capabilities; the hybrid classifier, timers, and
+classifier settings are included in `0.2.0`. `MAJOR` is for breaking configuration or storage
+changes, removed behavior, a higher minimum Chrome version, or material permission/privacy
+changes. Documentation-only, test-only, and development-only changes do not require a version
+bump unless they are packaged for a Chrome release. Every uploaded Chrome package must use a
+higher manifest version. `package.json` is the release source of truth, and validation fails if
+the manifest version diverges.
+
 ## What it does
 
 This standalone Manifest V3 extension semantically groups YouTube video tabs in the **current normal Chrome window**. Click the extension action, review the side-panel result, and matching tabs are placed in reusable native groups named `YT · <category>`. Rules and the bounded classification cache persist in `chrome.storage.local`.
