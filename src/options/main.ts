@@ -2,10 +2,12 @@ import "./styles.css";
 import { ClassificationCacheRepository } from "../cache/storage";
 import { GROUP_COLORS, type RuleConfig } from "../types";
 import {
+  InvalidStoredRuleConfigError,
   loadOrInitializeRuleConfig,
   restoreDefaultRuleConfig,
   saveRuleConfig,
 } from "../rules/storage";
+import type { RuleValidationIssue } from "../rules/validation";
 import { addRule, deleteRule, moveRule, updateRule } from "./state";
 
 let config: RuleConfig | undefined;
@@ -14,9 +16,20 @@ function getConfig(): RuleConfig {
   return config;
 }
 const root = () => document.querySelector<HTMLElement>("#rules");
+function renderValidationIssues(issues: RuleValidationIssue[]): void {
+  const list = document.querySelector<HTMLUListElement>("#validation-issues");
+  if (!list) return;
+  list.replaceChildren();
+  for (const issue of issues) {
+    const item = document.createElement("li");
+    item.textContent = `${issue.path || "configuration"}: ${issue.message}`;
+    list.append(item);
+  }
+}
 function render(): void {
   const container = root();
   if (!container || !config) return;
+  renderValidationIssues([]);
   container.replaceChildren();
   for (const rule of config.rules) {
     const fieldset = document.createElement("fieldset");
@@ -85,14 +98,19 @@ async function initialize(): Promise<void> {
   const status = document.querySelector<HTMLElement>("#status");
   document.querySelector<HTMLButtonElement>("#restore")?.addEventListener("click", async () => {
     if (!window.confirm("Restore default categories?")) return;
-    config = await restoreDefaultRuleConfig(chrome.storage.local);
-    await new ClassificationCacheRepository(chrome.storage.local).clear();
-    for (const id of ["rules", "add", "save", "clear-cache"]) {
-      const element = document.querySelector<HTMLElement>(`#${id}`);
-      if (element) element.hidden = false;
+    try {
+      config = await restoreDefaultRuleConfig(chrome.storage.local);
+      await new ClassificationCacheRepository(chrome.storage.local).clear();
+      for (const id of ["rules", "add", "save", "clear-cache"]) {
+        const element = document.querySelector<HTMLElement>(`#${id}`);
+        if (element) element.hidden = false;
+      }
+      render();
+      if (status) status.textContent = "Defaults restored and cache cleared.";
+    } catch (error) {
+      if (status)
+        status.textContent = error instanceof Error ? error.message : "Unable to restore defaults.";
     }
-    render();
-    if (status) status.textContent = "Defaults restored and cache cleared.";
   });
   try {
     config = await loadOrInitializeRuleConfig(chrome.storage.local);
@@ -101,6 +119,7 @@ async function initialize(): Promise<void> {
     if (status)
       status.textContent =
         error instanceof Error ? error.message : "Stored configuration is invalid.";
+    renderValidationIssues(error instanceof InvalidStoredRuleConfigError ? error.issues : []);
     for (const id of ["rules", "add", "save", "clear-cache"]) {
       const element = document.querySelector<HTMLElement>(`#${id}`);
       if (element) element.hidden = id === "rules";
@@ -118,12 +137,18 @@ async function initialize(): Promise<void> {
       render();
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Unable to save.";
+      renderValidationIssues(error instanceof InvalidStoredRuleConfigError ? error.issues : []);
     }
   });
   document.querySelector<HTMLButtonElement>("#clear-cache")?.addEventListener("click", async () => {
     if (!window.confirm("Clear classification cache?")) return;
-    await new ClassificationCacheRepository(chrome.storage.local).clear();
-    if (status) status.textContent = "Classification cache cleared.";
+    try {
+      await new ClassificationCacheRepository(chrome.storage.local).clear();
+      if (status) status.textContent = "Classification cache cleared.";
+    } catch (error) {
+      if (status)
+        status.textContent = error instanceof Error ? error.message : "Unable to clear cache.";
+    }
   });
 }
 export function initializeOptions(): void {
