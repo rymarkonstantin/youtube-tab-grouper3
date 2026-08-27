@@ -13,6 +13,7 @@ export async function applyGroupingPlan(
   };
   for (const group of plan.groups) {
     let groupId: number | undefined = group.reuseGroupId;
+    let operation = "groupTabs";
     try {
       if (groupId !== undefined) {
         try {
@@ -32,12 +33,22 @@ export async function applyGroupingPlan(
         groupId === undefined
           ? { tabIds: group.tabIds, windowId: plan.windowId }
           : { tabIds: group.tabIds, groupId };
+      operation = "groupTabs";
       groupId = await groups.groupTabs(input);
+      operation = "updateGroup";
       await groups.updateGroup(groupId, { title: group.title, color: group.color });
+      operation = "moveGroup";
       await groups.moveGroup(groupId, group.targetIndex);
       report.appliedRuleIds.push(group.ruleId);
       report.groupedTabIds.push(...group.tabIds);
-    } catch {
+    } catch (error) {
+      console.warn("[youtube-tab-grouper3] grouping:operation-failed", {
+        operation,
+        ruleId: group.ruleId,
+        tabCount: group.tabIds.length,
+        errorType: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : undefined,
+      });
       report.failedRuleIds.push(group.ruleId);
     }
   }
