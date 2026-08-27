@@ -10,10 +10,12 @@ import { runGrouping } from "../run/coordinator";
 import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
 import { toPanelViewModel } from "./state";
+import { beginTimer, disposeTimer, endTimer, setTimerPhase } from "./timer-ui";
 
 let currentRun: { controller: AbortController; pending?: ActivationRequiredError } | undefined;
 
 function render(state: PanelState): void {
+  if (state.kind === "running") setTimerPhase(state.progress.phase);
   const view = toPanelViewModel(state);
   const status = document.querySelector<HTMLElement>("#status");
   if (status) status.textContent = `${view.heading}: ${view.message}`;
@@ -76,6 +78,7 @@ async function startRun(allowDownloads: boolean): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
   currentRun = { controller };
+  beginTimer();
   render({ kind: "checking" });
   setBadge("…", "#777777");
   try {
@@ -107,6 +110,7 @@ async function startRun(allowDownloads: boolean): Promise<void> {
       },
     );
     render({ kind: "complete", summary });
+    endTimer();
     setBadge(
       summary.failed ? "!" : summary.grouped > 999 ? "999+" : String(summary.grouped),
       summary.failed ? "#b3261e" : "#188038",
@@ -126,6 +130,7 @@ async function startRun(allowDownloads: boolean): Promise<void> {
         kind: "error",
         message: error instanceof Error ? error.message : "Unexpected error.",
       });
+    if (!(error instanceof ActivationRequiredError)) endTimer();
   } finally {
     if (!currentRun?.pending) currentRun = undefined;
   }
@@ -164,7 +169,14 @@ export function initializeSidePanel(): void {
           }),
       );
   });
-  window.addEventListener("pagehide", () => currentRun?.controller.abort(), { once: true });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      currentRun?.controller.abort();
+      disposeTimer();
+    },
+    { once: true },
+  );
   void startRun(false);
 }
 if (typeof document !== "undefined")
