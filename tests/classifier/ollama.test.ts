@@ -38,6 +38,23 @@ const input: ClassifierInput = {
   ],
 };
 
+const twoItemInput: ClassifierInput = {
+  ...input,
+  items: [
+    ...input.items,
+    {
+      itemId: "video-2",
+      metadata: {
+        videoId: "def",
+        pageType: "watch",
+        title: "Second video",
+        description: "Another description",
+        channelName: "Another channel",
+      },
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -217,6 +234,63 @@ describe("OllamaClassifierProvider", () => {
         content: expect.stringContaining("日本語の補足説明"),
       }),
     ]);
+  });
+
+  it("retries only missing items when a batch response is incomplete", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            content: JSON.stringify({
+              results: [
+                {
+                  itemId: "video-1",
+                  ruleId: "programming",
+                  reason: "The first video is about software development.",
+                },
+              ],
+            }),
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            content: JSON.stringify({
+              results: [
+                {
+                  itemId: "video-2",
+                  ruleId: "uncategorized",
+                  reason: "The second video does not match a specific topic.",
+                },
+              ],
+            }),
+          },
+        }),
+      );
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher,
+    });
+
+    await expect(provider.classify(twoItemInput, new AbortController().signal)).resolves.toEqual([
+      {
+        itemId: "video-1",
+        ruleId: "programming",
+        reason: "The first video is about software development.",
+      },
+      {
+        itemId: "video-2",
+        ruleId: "uncategorized",
+        reason: "The second video does not match a specific topic.",
+      },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).messages[1].content).toContain(
+      "Second video",
+    );
   });
 
   it("maps an unavailable Ollama runtime to a typed provider error", async () => {

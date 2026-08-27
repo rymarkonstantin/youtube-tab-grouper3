@@ -68,3 +68,43 @@ export function parseClassificationResponse(
     (id) => normalized.find((result) => result.itemId === id) as ClassificationResult,
   );
 }
+
+export function parsePartialClassificationResponse(
+  raw: string,
+  expectedItemIds: string[],
+  enabledRuleIds: Set<string>,
+): ClassificationResult[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return [];
+  const results = (parsed as Record<string, unknown>).results;
+  if (!Array.isArray(results)) return [];
+  const expected = new Set(expectedItemIds);
+  const seen = new Set<string>();
+  const normalized: ClassificationResult[] = [];
+  for (const value of results) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+    const item = value as Record<string, unknown>;
+    if (
+      typeof item.itemId !== "string" ||
+      typeof item.ruleId !== "string" ||
+      typeof item.reason !== "string" ||
+      !expected.has(item.itemId) ||
+      seen.has(item.itemId) ||
+      !enabledRuleIds.has(item.ruleId)
+    )
+      continue;
+    const reason = item.reason.trim();
+    if (!reason || reason.length > 500) continue;
+    seen.add(item.itemId);
+    normalized.push({ itemId: item.itemId, ruleId: item.ruleId, reason });
+  }
+  return expectedItemIds.flatMap((id) => {
+    const result = normalized.find((item) => item.itemId === id);
+    return result ? [result] : [];
+  });
+}
