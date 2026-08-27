@@ -158,7 +158,6 @@ async function startRun(): Promise<void> {
       },
     );
     render({ kind: "complete", summary });
-    endTimer();
     setBadge(
       summary.failed ? "!" : summary.grouped > 999 ? "999+" : String(summary.grouped),
       summary.failed ? "#b3261e" : "#188038",

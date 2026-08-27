@@ -66,27 +66,66 @@ export class ChromeTabsAdapter implements TabsPort {
     const eligible = tabs.filter(
       (tab) => !tab.pinned && !tab.discarded && parseYouTubeVideoUrl(tab.url ?? ""),
     );
+    const startedAt = Date.now();
+    let completed = 0;
+    let started = 0;
+    let succeeded = 0;
+    let failed = 0;
+    console.info("[youtube-tab-grouper3] metadata:start", {
+      totalTabs: tabs.length,
+      eligibleTabs: eligible.length,
+      concurrency: METADATA_CONCURRENCY,
+    });
+    const heartbeat = setInterval(() => {
+      console.debug("[youtube-tab-grouper3] metadata:waiting", {
+        completed,
+        total: eligible.length,
+        inFlight: started - completed,
+        elapsedMs: Date.now() - startedAt,
+      });
+    }, 10_000);
     const results = await mapWithConcurrency(eligible, async (tab): Promise<TabMetadataResult> => {
+      started++;
       const identity = parseYouTubeVideoUrl(tab.url ?? "");
       if (!identity) return { ok: false, tab, error: "Unsupported YouTube page." };
+      let result: TabMetadataResult;
       try {
         const [frame] = await this.api.scripting.executeScript({
           target: { tabId: tab.id },
           func: extractYouTubePageMetadata,
         });
         const metadata = normalizeVideoMetadata(identity, frame?.result, tab.title);
-        return metadata
+        result = metadata
           ? { ok: true, tab, metadata }
           : { ok: false, tab, error: "No usable video title." };
       } catch (error) {
         const fallback = normalizeVideoMetadata(identity, undefined, tab.title);
-        if (fallback) return { ok: true, tab, metadata: fallback };
-        return {
-          ok: false,
-          tab,
-          error: error instanceof Error ? error.message : "Metadata unavailable.",
-        };
+        result = fallback
+          ? { ok: true, tab, metadata: fallback }
+          : {
+              ok: false,
+              tab,
+              error: error instanceof Error ? error.message : "Metadata unavailable.",
+            };
       }
+      completed++;
+      if (result.ok) succeeded++;
+      else failed++;
+      console.debug("[youtube-tab-grouper3] metadata:progress", {
+        completed,
+        total: eligible.length,
+        succeeded,
+        failed,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return result;
+    });
+    clearInterval(heartbeat);
+    console.info("[youtube-tab-grouper3] metadata:complete", {
+      completed,
+      succeeded,
+      failed,
+      elapsedMs: Date.now() - startedAt,
     });
     return results;
   }
