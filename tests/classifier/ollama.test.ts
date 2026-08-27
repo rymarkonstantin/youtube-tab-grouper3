@@ -123,6 +123,27 @@ describe("OllamaClassifierProvider", () => {
     },
   );
 
+  it("accepts the model details payload returned by Ollama", async () => {
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher: vi.fn().mockResolvedValue(
+        jsonResponse({
+          details: {
+            family: "qwen2",
+            parameter_size: "3.1B",
+            quantization_level: "Q4_K_M",
+          },
+          capabilities: ["completion", "tools"],
+        }),
+      ),
+    });
+
+    await expect(provider.health(new AbortController().signal)).resolves.toEqual({
+      available: true,
+    });
+  });
+
   it("sends a semantic structured-output request to the configured model and endpoint", async () => {
     const fetcher = vi.fn().mockResolvedValue(validResponse());
     const provider = new OllamaClassifierProvider({
