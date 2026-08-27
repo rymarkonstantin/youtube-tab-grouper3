@@ -2,17 +2,47 @@ import "./styles.css";
 import { ClassificationCacheRepository } from "../cache/storage";
 import { ChromeGroupsAdapter } from "../chrome/groups";
 import { ChromeTabsAdapter } from "../chrome/tabs";
-import { ChromeBuiltInClassifier, ChromeLanguageModelPort } from "../classifier/chrome-built-in";
-import { ChromeLanguageApi } from "../classifier/language";
-import { ActivationRequiredError, AiUnavailableError } from "../classifier/errors";
+import type { ClassifierConfig } from "../classifier/config";
+import { OllamaClassifierProvider } from "../classifier/ollama";
+import {
+  ProviderChainClassifier,
+  ProviderUnavailableError,
+  type SemanticClassifierProvider,
+} from "../classifier/providers";
+import { RemoteClassifierProvider } from "../classifier/remote";
+import {
+  InvalidStoredClassifierConfigError,
+  loadOrInitializeClassifierConfig,
+  remotePermissionOrigin,
+} from "../classifier/storage";
+import { RunDiagnostics } from "../diagnostics";
 import { InvalidStoredRuleConfigError, loadOrInitializeRuleConfig } from "../rules/storage";
 import { runGrouping } from "../run/coordinator";
 import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
+import { diagnosticsCopyView, providerStatusView, type ProviderStatus } from "./provider-state";
 import { toPanelViewModel } from "./state";
 import { beginTimer, disposeTimer, endTimer, setTimerPhase } from "./timer-ui";
 
-let currentRun: { controller: AbortController; pending?: ActivationRequiredError } | undefined;
+let currentRun: { controller: AbortController } | undefined;
+let lastDiagnostics: RunDiagnostics | undefined;
+let diagnosticsEnabled = false;
+
+function renderProviderStatus(status: ProviderStatus): void {
+  const view = providerStatusView(status);
+  const element = document.querySelector<HTMLElement>("#provider-status");
+  if (!element) return;
+  element.textContent = view.message;
+  element.dataset.tone = view.tone;
+}
+
+function renderDiagnosticsCopyAction(): void {
+  const view = diagnosticsCopyView(diagnosticsEnabled, lastDiagnostics !== undefined);
+  const button = document.querySelector<HTMLButtonElement>("#copy-diagnostics");
+  if (!button) return;
+  button.hidden = !view.visible;
+  button.disabled = !view.enabled;
+}
 
 function render(state: PanelState): void {
   if (state.kind === "running") setTimerPhase(state.progress.phase);
@@ -61,52 +91,70 @@ function setBadge(text: string, color: string): void {
   void chrome.action.setBadgeBackgroundColor({ color });
 }
 
-function showDownloadProgress(capability: string, loaded: number): void {
-  const fraction = Math.max(0, Math.min(1, loaded));
-  const status = document.querySelector<HTMLElement>("#status");
-  if (status)
-    status.textContent = `Grouping YouTube tabs: Downloading ${capability} (${Math.round(fraction * 100)}%)`;
-  const progress = document.querySelector<HTMLProgressElement>("#progress");
-  if (progress) {
-    progress.hidden = false;
-    progress.max = 1;
-    progress.value = fraction;
-  }
-}
-
-async function startRun(allowDownloads: boolean): Promise<void> {
+async function startRun(): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
   currentRun = { controller };
   beginTimer();
+  diagnosticsEnabled = false;
+  lastDiagnostics = undefined;
+  renderDiagnosticsCopyAction();
+  renderProviderStatus({ kind: "idle" });
   render({ kind: "checking" });
   setBadge("…", "#777777");
+  let runClassifierConfig: ClassifierConfig | undefined;
   try {
     const storage = chrome.storage.local;
-    const config = await loadOrInitializeRuleConfig(storage);
-    const classifier = new ChromeBuiltInClassifier(
-      new ChromeLanguageApi(),
-      new ChromeLanguageModelPort(),
-      {
-        allowDownloads,
-        signal: controller.signal,
-        onDownloadProgress: (download) =>
-          showDownloadProgress(download.capability, download.loaded),
-        onPhase: (phase) =>
-          render({ kind: "running", progress: { phase, completed: 0, total: 1 } }),
+    const [rules, classifierConfig] = await Promise.all([
+      loadOrInitializeRuleConfig(storage),
+      loadOrInitializeClassifierConfig(storage),
+    ]);
+    runClassifierConfig = classifierConfig;
+    const diagnostics = new RunDiagnostics(classifierConfig.diagnosticsEnabled);
+    diagnosticsEnabled = classifierConfig.diagnosticsEnabled;
+    lastDiagnostics = diagnostics;
+    renderDiagnosticsCopyAction();
+    const providers: Partial<Record<"ollama" | "remote", SemanticClassifierProvider>> = {
+      ollama: new OllamaClassifierProvider(classifierConfig.local),
+    };
+    if (classifierConfig.remote.enabled) {
+      const origin = remotePermissionOrigin(classifierConfig.remote.endpoint);
+      if (origin !== null && (await chrome.permissions.contains({ origins: [origin] })))
+        providers.remote = new RemoteClassifierProvider(classifierConfig.remote);
+    }
+    const classifier = new ProviderChainClassifier({
+      config: classifierConfig,
+      providers,
+      signal: controller.signal,
+      onHealth: (providerId, health) => diagnostics.recordProviderHealth(providerId, health),
+      onFallback: (from, to, reason) => {
+        diagnostics.recordFallback(from, to, reason);
+        if (from === "ollama" && to === "remote")
+          renderProviderStatus({ kind: "fallback", from, to });
       },
-    );
+      onSelected: (providerId) => {
+        diagnostics.recordProviderSelected(providerId);
+        renderProviderStatus({
+          kind: "selected",
+          providerId,
+          model:
+            providerId === "ollama" ? classifierConfig.local.model : classifierConfig.remote.model,
+        });
+      },
+    });
     const summary: RunSummary = await runGrouping(
       {
-        loadRules: async () => config,
+        loadRules: async () => rules,
         cache: new ClassificationCacheRepository(storage),
         tabs: new ChromeTabsAdapter(chrome),
         groups: new ChromeGroupsAdapter(chrome),
         classifier,
+        classifierConfig,
       },
       {
         signal: controller.signal,
         onProgress: (progress) => render({ kind: "running", progress }),
+        diagnostics,
       },
     );
     render({ kind: "complete", summary });
@@ -116,13 +164,20 @@ async function startRun(allowDownloads: boolean): Promise<void> {
       summary.failed ? "#b3261e" : "#188038",
     );
   } catch (error) {
-    if (error instanceof ActivationRequiredError) {
-      currentRun.pending = error;
-      render({ kind: "needs-activation", capability: error.capability });
-      setBadge("!", "#777777");
-    } else if (error instanceof AiUnavailableError)
+    if (error instanceof ProviderUnavailableError) {
+      renderProviderStatus(
+        runClassifierConfig?.mode === "remote-only"
+          ? { kind: "remote-unavailable" }
+          : {
+              kind: "ollama-unavailable",
+              model: runClassifierConfig?.local.model ?? "the configured model",
+            },
+      );
       render({ kind: "unavailable", message: error.message });
-    else if (error instanceof InvalidStoredRuleConfigError)
+    } else if (
+      error instanceof InvalidStoredRuleConfigError ||
+      error instanceof InvalidStoredClassifierConfigError
+    )
       render({ kind: "configuration-error", message: error.message });
     else if (controller.signal.aborted) render({ kind: "cancelled" });
     else
@@ -130,9 +185,9 @@ async function startRun(allowDownloads: boolean): Promise<void> {
         kind: "error",
         message: error instanceof Error ? error.message : "Unexpected error.",
       });
-    if (!(error instanceof ActivationRequiredError)) endTimer();
+    endTimer();
   } finally {
-    if (!currentRun?.pending) currentRun = undefined;
+    currentRun = undefined;
   }
 }
 
@@ -145,39 +200,32 @@ export function initializeSidePanel(): void {
     ?.addEventListener("click", () => currentRun?.controller.abort());
   document.querySelector<HTMLButtonElement>("#run-again")?.addEventListener("click", () => {
     currentRun = undefined;
-    void startRun(false);
+    void startRun();
   });
-  document.querySelector<HTMLButtonElement>("#prepare")?.addEventListener("click", () => {
-    const pending = currentRun?.pending;
-    if (!pending || !navigator.userActivation.isActive) return;
-    const controller = new AbortController();
-    currentRun = { controller, pending };
-    void pending
-      .prepare({
-        signal: controller.signal,
-        onDownloadProgress: (loaded) => showDownloadProgress(pending.capability, loaded),
-      })
-      .then(
-        () => {
-          currentRun = undefined;
-          void startRun(false);
-        },
-        (error: unknown) =>
-          render({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Preparation failed.",
-          }),
-      );
-  });
+  document
+    .querySelector<HTMLButtonElement>("#copy-diagnostics")
+    ?.addEventListener("click", async () => {
+      if (!lastDiagnostics) return;
+      try {
+        await navigator.clipboard.writeText(lastDiagnostics.toText());
+        const status = document.querySelector<HTMLElement>("#status");
+        if (status) status.textContent = "Diagnostics copied to the clipboard.";
+      } catch {
+        const status = document.querySelector<HTMLElement>("#status");
+        if (status) status.textContent = "Unable to copy diagnostics to the clipboard.";
+      }
+    });
   window.addEventListener(
     "pagehide",
     () => {
       currentRun?.controller.abort();
       disposeTimer();
+      lastDiagnostics = undefined;
+      renderDiagnosticsCopyAction();
     },
     { once: true },
   );
-  void startRun(false);
+   void startRun();
 }
 if (typeof document !== "undefined")
   document.addEventListener("DOMContentLoaded", initializeSidePanel, { once: true });

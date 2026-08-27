@@ -8,9 +8,18 @@ describe("extension manifest", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.minimum_chrome_version).toBe("138");
     expect(manifest.permissions).toEqual(["scripting", "sidePanel", "storage", "tabGroups"]);
-    expect(manifest.host_permissions).toEqual(["https://*.youtube.com/*", "https://youtu.be/*"]);
+    expect(manifest.host_permissions).toEqual([
+      "https://*.youtube.com/*",
+      "https://youtu.be/*",
+      "http://127.0.0.1/*",
+      "http://localhost/*",
+      "https://127.0.0.1/*",
+      "https://localhost/*",
+    ]);
+    expect(manifest.optional_host_permissions).toEqual(["https://*/*"]);
     expect(manifest.permissions).not.toContain("tabs");
     expect(manifest.permissions).not.toContain("activeTab");
+    expect(manifest.permissions).not.toContain("aiLanguageModelOriginTrial");
     expect(manifest.incognito).toBe("not_allowed");
     expect(manifest.side_panel.default_path).toBe("sidepanel.html");
     expect(manifest.options_page).toBe("options.html");

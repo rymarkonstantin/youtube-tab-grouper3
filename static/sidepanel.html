@@ -10,6 +10,7 @@
     <main>
       <h1>YouTube Tab Grouper</h1>
       <p id="status" aria-live="polite">Checking YouTube tabs…</p>
+      <p id="provider-status" aria-live="polite"></p>
       <progress id="progress" value="0" max="1" hidden></progress>
       <p id="timers" aria-live="off" hidden>
         Total elapsed: <time id="total-elapsed">00:00</time><br />
@@ -21,6 +22,7 @@
         <button id="cancel" type="button" hidden>Cancel</button>
         <button id="run-again" type="button" hidden>Run again</button>
         <button id="edit" type="button">Edit categories</button>
+        <button id="copy-diagnostics" type="button" hidden>Copy diagnostics</button>
       </div>
     </main>
     <script type="module" src="sidepanel.js"></script>
