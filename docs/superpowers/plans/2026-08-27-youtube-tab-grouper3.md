@@ -55,7 +55,13 @@ git fetch origin
 git ls-remote --exit-code --heads origin main
 ```
 
-Exit code `0` with a commit ID means the branch exists; exit code `2` with no matching ref means it does not. Treat authentication, authorization, transport, or any other failure as a blocker rather than assuming the branch is absent.
+Exit code `0` with a commit ID means the branch exists. Git versions differ on the no-matching-ref exit code (commonly `1` or `2`), so treat the branch as absent only when the targeted lookup returns no output and this general heads query also succeeds with no output:
+
+```powershell
+git ls-remote --heads origin
+```
+
+Treat authentication, authorization, transport, or any other diagnostic/failure from either query as a blocker rather than assuming the branch is absent.
 
 If `origin/main` exists, attach local `main`, fast-forward it where possible, and inspect the remaining relationship:
 
