@@ -65,6 +65,16 @@ const modelInputs = (languages: string[]): LanguageModelIoExpectation[] => [
   { type: "text", languages },
 ];
 
+function errorIsTerminal(error: unknown): boolean {
+  return (
+    error instanceof ActivationRequiredError ||
+    error instanceof AiUnavailableError ||
+    error instanceof UnsupportedModelParametersError ||
+    error instanceof ClassifierContextError ||
+    (error instanceof DOMException && error.name === "AbortError")
+  );
+}
+
 export class ChromeLanguageModelPort implements LanguageModelPort {
   async params(): Promise<LanguageModelParams> {
     const model = (globalThis as { LanguageModel?: typeof LanguageModel }).LanguageModel;
@@ -180,9 +190,16 @@ export class ChromeBuiltInClassifier {
           onDownloadProgress: (loaded) =>
             this.options.onDownloadProgress({ capability: "language-model", loaded }),
         });
-        const measured = await session.measureContextUsage(userPrompt, {
-          responseConstraint: schema,
-        });
+        let measured: number;
+        try {
+          measured = await session.measureContextUsage(userPrompt, {
+            responseConstraint: schema,
+          });
+        } catch (error) {
+          session.destroy();
+          session = undefined;
+          throw error;
+        }
         if (session.contextUsage + measured <= session.contextWindow) break;
         session.destroy();
         session = undefined;
@@ -202,21 +219,25 @@ export class ChromeBuiltInClassifier {
           ),
         );
         offset += size;
-      } catch {
+      } catch (error: unknown) {
         if (this.options.signal.aborted) {
           throw new DOMException("The classification was aborted.", "AbortError");
+        }
+        if (errorIsTerminal(error)) {
+          throw error;
         }
         session.destroy();
         const unresolved = normalized.items.slice(offset, offset + size);
         for (const item of unresolved) {
-          const retry = await this.modelApi.create({
-            ...availabilityOptions,
-            initialPrompts: [{ role: "system", content: systemPrompt }],
-            signal: this.options.signal,
-            onDownloadProgress: (loaded) =>
-              this.options.onDownloadProgress({ capability: "language-model", loaded }),
-          });
+          let retry: LanguageModelSessionPort | undefined;
           try {
+            retry = await this.modelApi.create({
+              ...availabilityOptions,
+              initialPrompts: [{ role: "system", content: systemPrompt }],
+              signal: this.options.signal,
+              onDownloadProgress: (loaded) =>
+                this.options.onDownloadProgress({ capability: "language-model", loaded }),
+            });
             const onePrompt = buildBatchPrompt([item]);
             const retrySchema = createClassificationResponseSchema(
               [item.itemId],
@@ -234,9 +255,12 @@ export class ChromeBuiltInClassifier {
               ),
             );
           } catch {
+            if (this.options.signal.aborted) {
+              throw new DOMException("The classification was aborted.", "AbortError");
+            }
             // A repeated item failure remains unclassified for this run.
           } finally {
-            retry.destroy();
+            retry?.destroy();
           }
         }
         offset += size;

@@ -146,6 +146,7 @@ export async function normalizeClassifierInputs(
   const inputLanguages = new Set<string>();
   const translatedRules: GroupRule[] = [];
   const activeRules = rules.filter(({ enabled }) => enabled);
+  const translatorSessions = new Map<string, TranslatorSessionPort>();
   try {
     const detect = async (text: string): Promise<string> => {
       if (!text.trim()) return "en";
@@ -159,23 +160,18 @@ export async function normalizeClassifierInputs(
       const language = ruleLanguages.get(rule.id) ?? "en";
       if (PROMPT_LANGUAGES.has(language)) translatedRules.push(structuredClone(rule));
       else {
-        const names = new Map<string, TranslatorSessionPort>();
-        try {
-          translatedRules.push({
-            ...rule,
-            name: await translateValue(rule.name, language, api, options, names, false),
-            description: await translateValue(
-              rule.description,
-              language,
-              api,
-              options,
-              names,
-              false,
-            ),
-          });
-        } finally {
-          for (const session of names.values()) session.destroy();
-        }
+        translatedRules.push({
+          ...rule,
+          name: await translateValue(rule.name, language, api, options, translatorSessions, false),
+          description: await translateValue(
+            rule.description,
+            language,
+            api,
+            options,
+            translatorSessions,
+            false,
+          ),
+        });
       }
     }
     const normalizedItems: ClassificationItem[] = [];
@@ -186,7 +182,6 @@ export async function normalizeClassifierInputs(
         normalizedItems.push(structuredClone(item));
         continue;
       }
-      const sessions = new Map<string, TranslatorSessionPort>();
       try {
         const metadata = structuredClone(item.metadata);
         metadata.title = await translateValue(
@@ -194,18 +189,25 @@ export async function normalizeClassifierInputs(
           language,
           api,
           options,
-          sessions,
+          translatorSessions,
           true,
         );
         for (const key of ["description", "channelName", "playlistTitle"] as const) {
           const value = metadata[key];
           if (value)
-            metadata[key] = await translateValue(value, language, api, options, sessions, true);
+            metadata[key] = await translateValue(
+              value,
+              language,
+              api,
+              options,
+              translatorSessions,
+              true,
+            );
         }
         if (metadata.hashtags) {
           metadata.hashtags = await Promise.all(
             metadata.hashtags.map((tag) =>
-              translateValue(tag, language, api, options, sessions, true),
+              translateValue(tag, language, api, options, translatorSessions, true),
             ),
           );
         }
@@ -214,8 +216,6 @@ export async function normalizeClassifierInputs(
       } catch (error) {
         if (error instanceof ActivationRequiredError) throw error;
         failedItemIds.push(item.itemId);
-      } finally {
-        for (const session of sessions.values()) session.destroy();
       }
     }
     return {
@@ -225,6 +225,7 @@ export async function normalizeClassifierInputs(
       failedItemIds,
     };
   } finally {
+    for (const session of translatorSessions.values()) session.destroy();
     detector.destroy();
   }
 }
