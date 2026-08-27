@@ -79,6 +79,8 @@ export class ChromeTabsAdapter implements TabsPort {
           ? { ok: true, tab, metadata }
           : { ok: false, tab, error: "No usable video title." };
       } catch (error) {
+        const fallback = normalizeVideoMetadata(identity, undefined, tab.title);
+        if (fallback) return { ok: true, tab, metadata: fallback };
         return {
           ok: false,
           tab,
