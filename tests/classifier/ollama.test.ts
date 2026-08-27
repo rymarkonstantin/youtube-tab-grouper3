@@ -165,6 +165,24 @@ describe("OllamaClassifierProvider", () => {
     });
   });
 
+  it("invokes the native fetcher with the global receiver", async () => {
+    const fetcher = vi.fn(function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(
+        jsonResponse({ details: { family: "qwen2" }, capabilities: ["completion"] }),
+      );
+    });
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher,
+    });
+
+    await expect(provider.health(new AbortController().signal)).resolves.toEqual({
+      available: true,
+    });
+  });
+
   it("sends a semantic structured-output request to the configured model and endpoint", async () => {
     const fetcher = vi.fn().mockResolvedValue(validResponse());
     const provider = new OllamaClassifierProvider({
