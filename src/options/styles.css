@@ -11,14 +11,36 @@ body {
 main {
   max-width: 48rem;
 }
+
+section {
+  margin-top: 2rem;
+}
+
 fieldset {
   display: grid;
   gap: 0.5rem;
   margin: 1rem 0;
 }
+
+label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
 textarea {
   min-height: 5rem;
 }
+
 button {
   margin: 0.25rem;
+}
+
+#remote-status[data-tone="warning"] {
+  color: #b3261e;
 }

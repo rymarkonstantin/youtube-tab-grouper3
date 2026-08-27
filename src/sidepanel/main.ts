@@ -2,6 +2,7 @@ import "./styles.css";
 import { ClassificationCacheRepository } from "../cache/storage";
 import { ChromeGroupsAdapter } from "../chrome/groups";
 import { ChromeTabsAdapter } from "../chrome/tabs";
+import type { ClassifierConfig } from "../classifier/config";
 import { OllamaClassifierProvider } from "../classifier/ollama";
 import {
   ProviderChainClassifier,
@@ -12,15 +13,35 @@ import { RemoteClassifierProvider } from "../classifier/remote";
 import {
   InvalidStoredClassifierConfigError,
   loadOrInitializeClassifierConfig,
+  remotePermissionOrigin,
 } from "../classifier/storage";
 import { RunDiagnostics } from "../diagnostics";
 import { InvalidStoredRuleConfigError, loadOrInitializeRuleConfig } from "../rules/storage";
 import { runGrouping } from "../run/coordinator";
 import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
+import { diagnosticsCopyView, providerStatusView, type ProviderStatus } from "./provider-state";
 import { toPanelViewModel } from "./state";
 
 let currentRun: { controller: AbortController } | undefined;
+let lastDiagnostics: RunDiagnostics | undefined;
+let diagnosticsEnabled = false;
+
+function renderProviderStatus(status: ProviderStatus): void {
+  const view = providerStatusView(status);
+  const element = document.querySelector<HTMLElement>("#provider-status");
+  if (!element) return;
+  element.textContent = view.message;
+  element.dataset.tone = view.tone;
+}
+
+function renderDiagnosticsCopyAction(): void {
+  const view = diagnosticsCopyView(diagnosticsEnabled, lastDiagnostics !== undefined);
+  const button = document.querySelector<HTMLButtonElement>("#copy-diagnostics");
+  if (!button) return;
+  button.hidden = !view.visible;
+  button.disabled = !view.enabled;
+}
 
 function render(state: PanelState): void {
   const view = toPanelViewModel(state);
@@ -72,27 +93,51 @@ async function startRun(): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
   currentRun = { controller };
+  diagnosticsEnabled = false;
+  lastDiagnostics = undefined;
+  renderDiagnosticsCopyAction();
+  renderProviderStatus({ kind: "idle" });
   render({ kind: "checking" });
   setBadge("…", "#777777");
+  let runClassifierConfig: ClassifierConfig | undefined;
   try {
     const storage = chrome.storage.local;
     const [rules, classifierConfig] = await Promise.all([
       loadOrInitializeRuleConfig(storage),
       loadOrInitializeClassifierConfig(storage),
     ]);
+    runClassifierConfig = classifierConfig;
     const diagnostics = new RunDiagnostics(classifierConfig.diagnosticsEnabled);
+    diagnosticsEnabled = classifierConfig.diagnosticsEnabled;
+    lastDiagnostics = diagnostics;
+    renderDiagnosticsCopyAction();
     const providers: Partial<Record<"ollama" | "remote", SemanticClassifierProvider>> = {
       ollama: new OllamaClassifierProvider(classifierConfig.local),
     };
-    if (classifierConfig.remote.enabled)
-      providers.remote = new RemoteClassifierProvider(classifierConfig.remote);
+    if (classifierConfig.remote.enabled) {
+      const origin = remotePermissionOrigin(classifierConfig.remote.endpoint);
+      if (origin !== null && (await chrome.permissions.contains({ origins: [origin] })))
+        providers.remote = new RemoteClassifierProvider(classifierConfig.remote);
+    }
     const classifier = new ProviderChainClassifier({
       config: classifierConfig,
       providers,
       signal: controller.signal,
       onHealth: (providerId, health) => diagnostics.recordProviderHealth(providerId, health),
-      onFallback: (from, to, reason) => diagnostics.recordFallback(from, to, reason),
-      onSelected: (providerId) => diagnostics.recordProviderSelected(providerId),
+      onFallback: (from, to, reason) => {
+        diagnostics.recordFallback(from, to, reason);
+        if (from === "ollama" && to === "remote")
+          renderProviderStatus({ kind: "fallback", from, to });
+      },
+      onSelected: (providerId) => {
+        diagnostics.recordProviderSelected(providerId);
+        renderProviderStatus({
+          kind: "selected",
+          providerId,
+          model:
+            providerId === "ollama" ? classifierConfig.local.model : classifierConfig.remote.model,
+        });
+      },
     });
     const summary: RunSummary = await runGrouping(
       {
@@ -115,9 +160,17 @@ async function startRun(): Promise<void> {
       summary.failed ? "#b3261e" : "#188038",
     );
   } catch (error) {
-    if (error instanceof ProviderUnavailableError)
+    if (error instanceof ProviderUnavailableError) {
+      renderProviderStatus(
+        runClassifierConfig?.mode === "remote-only"
+          ? { kind: "remote-unavailable" }
+          : {
+              kind: "ollama-unavailable",
+              model: runClassifierConfig?.local.model ?? "the configured model",
+            },
+      );
       render({ kind: "unavailable", message: error.message });
-    else if (
+    } else if (
       error instanceof InvalidStoredRuleConfigError ||
       error instanceof InvalidStoredClassifierConfigError
     )
@@ -144,7 +197,28 @@ export function initializeSidePanel(): void {
     currentRun = undefined;
     void startRun();
   });
-  window.addEventListener("pagehide", () => currentRun?.controller.abort(), { once: true });
+  document
+    .querySelector<HTMLButtonElement>("#copy-diagnostics")
+    ?.addEventListener("click", async () => {
+      if (!lastDiagnostics) return;
+      try {
+        await navigator.clipboard.writeText(lastDiagnostics.toText());
+        const status = document.querySelector<HTMLElement>("#status");
+        if (status) status.textContent = "Diagnostics copied to the clipboard.";
+      } catch {
+        const status = document.querySelector<HTMLElement>("#status");
+        if (status) status.textContent = "Unable to copy diagnostics to the clipboard.";
+      }
+    });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      currentRun?.controller.abort();
+      lastDiagnostics = undefined;
+      renderDiagnosticsCopyAction();
+    },
+    { once: true },
+  );
   void startRun();
 }
 if (typeof document !== "undefined")
