@@ -5,12 +5,7 @@ import type {
   LanguageApiPort,
   LanguageNormalizationOptions,
 } from "./language";
-import {
-  ActivationRequiredError,
-  AiUnavailableError,
-  ClassifierContextError,
-  UnsupportedModelParametersError,
-} from "./errors";
+import { ActivationRequiredError, AiUnavailableError, ClassifierContextError } from "./errors";
 import { normalizeClassifierInputs } from "./language";
 import { buildBatchPrompt, buildClassifierSystemPrompt } from "./prompt";
 import { createClassificationResponseSchema, parseClassificationResponse } from "./response";
@@ -22,19 +17,11 @@ export interface LanguageModelIoExpectation {
 export interface LanguageModelAvailabilityOptions {
   expectedInputs: LanguageModelIoExpectation[];
   expectedOutputs: LanguageModelIoExpectation[];
-  temperature: 0;
-  topK: 1;
 }
 export interface LanguageModelCreateOptions extends LanguageModelAvailabilityOptions {
   initialPrompts: Array<{ role: "system"; content: string }>;
   signal: AbortSignal;
   onDownloadProgress(loaded: number): void;
-}
-export interface LanguageModelParams {
-  defaultTopK: number;
-  maxTopK: number;
-  defaultTemperature: number;
-  maxTemperature: number;
 }
 export interface LanguageModelSessionPort {
   readonly contextUsage: number;
@@ -50,7 +37,6 @@ export interface LanguageModelSessionPort {
   destroy(): void;
 }
 export interface LanguageModelPort {
-  params(): Promise<LanguageModelParams>;
   availability(options: LanguageModelAvailabilityOptions): Promise<AiAvailability>;
   create(options: LanguageModelCreateOptions): Promise<LanguageModelSessionPort>;
 }
@@ -69,18 +55,12 @@ function errorIsTerminal(error: unknown): boolean {
   return (
     error instanceof ActivationRequiredError ||
     error instanceof AiUnavailableError ||
-    error instanceof UnsupportedModelParametersError ||
     error instanceof ClassifierContextError ||
     (error instanceof DOMException && error.name === "AbortError")
   );
 }
 
 export class ChromeLanguageModelPort implements LanguageModelPort {
-  async params(): Promise<LanguageModelParams> {
-    const model = (globalThis as { LanguageModel?: typeof LanguageModel }).LanguageModel;
-    if (!model) throw new AiUnavailableError("language-model");
-    return model.params();
-  }
   async availability(options: LanguageModelAvailabilityOptions): Promise<AiAvailability> {
     const model = (globalThis as { LanguageModel?: typeof LanguageModel }).LanguageModel;
     if (!model) return "unavailable";
@@ -92,8 +72,6 @@ export class ChromeLanguageModelPort implements LanguageModelPort {
     const session = await model.create({
       expectedInputs: options.expectedInputs,
       expectedOutputs: options.expectedOutputs,
-      temperature: options.temperature,
-      topK: options.topK,
       initialPrompts: options.initialPrompts as unknown as LanguageModelMessage[],
       signal: options.signal,
       monitor: (monitor) =>
@@ -138,20 +116,12 @@ export class ChromeBuiltInClassifier {
     );
     if (normalized.items.length === 0) return [];
     this.options.onPhase("classifying");
-    const params = await this.modelApi.params();
-    if (params.maxTemperature < 0 || params.maxTopK < 1)
-      throw new UnsupportedModelParametersError();
     const enabledRules = normalized.rules.filter(({ enabled }) => enabled);
     const languages = [...new Set(["en", ...normalized.inputLanguages])];
     const expectedInputs = modelInputs(languages);
     const expectedOutputs = modelInputs(["en"]);
     const systemPrompt = buildClassifierSystemPrompt(enabledRules, fallbackRuleId);
-    const availabilityOptions = {
-      expectedInputs,
-      expectedOutputs,
-      temperature: 0 as const,
-      topK: 1 as const,
-    };
+    const availabilityOptions = { expectedInputs, expectedOutputs };
     const availability = await this.modelApi.availability(availabilityOptions);
     if (availability === "unavailable") throw new AiUnavailableError("language-model");
     if (
