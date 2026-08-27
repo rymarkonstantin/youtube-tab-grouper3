@@ -11,6 +11,7 @@ export type OllamaProviderErrorCode =
   | "unavailable"
   | "timeout"
   | "model-missing"
+  | "malformed-response"
   | "request-failed";
 
 export class OllamaProviderError extends Error {
@@ -20,6 +21,7 @@ export class OllamaProviderError extends Error {
         unavailable: "Ollama is not running or cannot be reached.",
         timeout: "Ollama did not respond before the request timed out.",
         "model-missing": "The configured Ollama model is not available.",
+        "malformed-response": "Ollama returned an invalid response.",
         "request-failed": "Ollama could not complete the classification request.",
       }[code],
     );
@@ -49,7 +51,7 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
 
   async health(signal: AbortSignal): Promise<ProviderHealth> {
     try {
-      await this.request(
+      const response = await this.request(
         "/api/show",
         {
           method: "POST",
@@ -58,6 +60,7 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
         },
         signal,
       );
+      await validateShowResponse(response);
       return { available: true };
     } catch (error) {
       if (signal.aborted) throw abortError(signal);
@@ -149,4 +152,19 @@ function abortError(signal: AbortSignal): Error {
   return signal.reason instanceof Error
     ? signal.reason
     : new DOMException("The operation was aborted.", "AbortError");
+}
+
+async function validateShowResponse(response: Response): Promise<void> {
+  let payload: unknown;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    throw new OllamaProviderError("malformed-response");
+  }
+  if (!isRecord(payload) || !isRecord(payload.details))
+    throw new OllamaProviderError("malformed-response");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

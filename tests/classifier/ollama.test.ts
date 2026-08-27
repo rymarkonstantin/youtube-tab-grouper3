@@ -104,6 +104,25 @@ describe("OllamaClassifierProvider", () => {
     );
   });
 
+  it.each([
+    ["invalid JSON", new Response("not JSON", { status: 200 })],
+    ["missing model details", jsonResponse({ model_info: {} })],
+  ])(
+    "reports %s from a successful model health response as malformed",
+    async (_label, response) => {
+      const provider = new OllamaClassifierProvider({
+        endpoint: "http://127.0.0.1:11434",
+        model: "qwen2.5:3b-instruct",
+        fetcher: vi.fn().mockResolvedValue(response),
+      });
+
+      await expect(provider.health(new AbortController().signal)).resolves.toEqual({
+        available: false,
+        reason: "malformed-response",
+      });
+    },
+  );
+
   it("sends a semantic structured-output request to the configured model and endpoint", async () => {
     const fetcher = vi.fn().mockResolvedValue(validResponse());
     const provider = new OllamaClassifierProvider({
