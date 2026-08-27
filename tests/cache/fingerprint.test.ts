@@ -94,3 +94,19 @@ it("changes when the active provider or model changes", async () => {
   remote.remote.model = "gpt-4.1-nano";
   expect(await fingerprintClassificationRules(rules, remote, "remote")).not.toBe(remoteBaseline);
 });
+
+it("changes when Turbo mode changes", async () => {
+  const rules = createDefaultRuleConfig();
+  const config = createDefaultClassifierConfig();
+  const baseline = await fingerprintClassificationRules(rules, config, "ollama");
+  const turbo = { ...config, turboMode: true };
+  expect(await fingerprintClassificationRules(rules, turbo, "ollama")).not.toBe(baseline);
+});
+
+it("does not change when only concurrency changes", async () => {
+  const rules = createDefaultRuleConfig();
+  const config = createDefaultClassifierConfig();
+  const baseline = await fingerprintClassificationRules(rules, config, "ollama");
+  const concurrent = { ...config, concurrency: 8 };
+  expect(await fingerprintClassificationRules(rules, concurrent, "ollama")).toBe(baseline);
+});

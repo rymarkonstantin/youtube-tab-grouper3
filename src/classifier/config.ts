@@ -20,6 +20,8 @@ export interface ClassifierConfig {
   local: LocalClassifierConfig;
   remote: RemoteClassifierConfig;
   diagnosticsEnabled: boolean;
+  turboMode: boolean;
+  concurrency: number;
 }
 
 export interface ClassifierConfigValidationIssue {
@@ -37,6 +39,8 @@ export const DEFAULT_CLASSIFIER_CONFIG: ClassifierConfig = {
   local: { endpoint: "http://127.0.0.1:11434", model: "qwen2.5:3b-instruct" },
   remote: { enabled: false, endpoint: "", model: "", apiKey: "" },
   diagnosticsEnabled: false,
+  turboMode: false,
+  concurrency: 1,
 };
 
 export function createDefaultClassifierConfig(): ClassifierConfig {
@@ -128,6 +132,15 @@ export function validateClassifierConfig(value: unknown): ClassifierConfigValida
       path: "diagnosticsEnabled",
       message: "Diagnostics enabled value must be boolean.",
     });
+  if (typeof value.turboMode !== "boolean")
+    issues.push({ path: "turboMode", message: "Turbo mode value must be boolean." });
+  if (
+    typeof value.concurrency !== "number" ||
+    !Number.isInteger(value.concurrency) ||
+    value.concurrency < 1 ||
+    value.concurrency > 8
+  )
+    issues.push({ path: "concurrency", message: "Concurrency must be an integer from 1 to 8." });
   if (issues.length > 0) return { ok: false, issues };
   return {
     ok: true,
@@ -145,6 +158,8 @@ export function validateClassifierConfig(value: unknown): ClassifierConfigValida
         apiKey: remote.apiKey as string,
       },
       diagnosticsEnabled: value.diagnosticsEnabled as boolean,
+      turboMode: value.turboMode as boolean,
+      concurrency: value.concurrency as number,
     },
   };
 }

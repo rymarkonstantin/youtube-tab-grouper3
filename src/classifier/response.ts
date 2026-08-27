@@ -15,7 +15,7 @@ export function createClassificationResponseSchema(
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["itemId", "ruleId", "reason"],
+          required: ["itemId", "ruleId"],
           properties: {
             itemId: { type: "string", enum: itemIds },
             ruleId: { type: "string", enum: ruleIds },
@@ -40,7 +40,9 @@ export function parseClassificationResponse(
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
     throw new MalformedClassificationResponseError();
-  const results = (parsed as Record<string, unknown>).results;
+  const response = parsed as Record<string, unknown>;
+  if (!hasOnlyKeys(response, ["results"])) throw new MalformedClassificationResponseError();
+  const results = response.results;
   if (!Array.isArray(results) || results.length !== expectedItemIds.length)
     throw new MalformedClassificationResponseError();
   const expected = new Set(expectedItemIds);
@@ -50,18 +52,13 @@ export function parseClassificationResponse(
     if (typeof value !== "object" || value === null || Array.isArray(value))
       throw new MalformedClassificationResponseError();
     const item = value as Record<string, unknown>;
-    if (
-      typeof item.itemId !== "string" ||
-      typeof item.ruleId !== "string" ||
-      typeof item.reason !== "string"
-    )
+    if (!hasOnlyKeys(item, ["itemId", "ruleId", "reason"]))
       throw new MalformedClassificationResponseError();
-    if (!expected.has(item.itemId) || seen.has(item.itemId) || !enabledRuleIds.has(item.ruleId))
+    const normalizedItem = normalizeItem(item, expected, enabledRuleIds, true);
+    if (!normalizedItem || seen.has(normalizedItem.itemId))
       throw new MalformedClassificationResponseError();
-    const reason = item.reason.trim();
-    if (!reason || reason.length > 500) throw new MalformedClassificationResponseError();
-    seen.add(item.itemId);
-    normalized.push({ itemId: item.itemId, ruleId: item.ruleId, reason });
+    seen.add(normalizedItem.itemId);
+    normalized.push(normalizedItem);
   }
   if (seen.size !== expected.size) throw new MalformedClassificationResponseError();
   return expectedItemIds.map(
@@ -81,7 +78,9 @@ export function parsePartialClassificationResponse(
     return [];
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return [];
-  const results = (parsed as Record<string, unknown>).results;
+  const response = parsed as Record<string, unknown>;
+  if (!hasOnlyKeys(response, ["results"])) return [];
+  const results = response.results;
   if (!Array.isArray(results)) return [];
   const expected = new Set(expectedItemIds);
   const seen = new Set<string>();
@@ -89,22 +88,47 @@ export function parsePartialClassificationResponse(
   for (const value of results) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
     const item = value as Record<string, unknown>;
-    if (
-      typeof item.itemId !== "string" ||
-      typeof item.ruleId !== "string" ||
-      typeof item.reason !== "string" ||
-      !expected.has(item.itemId) ||
-      seen.has(item.itemId) ||
-      !enabledRuleIds.has(item.ruleId)
-    )
-      continue;
-    const reason = item.reason.trim();
-    if (!reason || reason.length > 500) continue;
-    seen.add(item.itemId);
-    normalized.push({ itemId: item.itemId, ruleId: item.ruleId, reason });
+    if (!hasOnlyKeys(item, ["itemId", "ruleId", "reason"])) continue;
+    const normalizedItem = normalizeItem(item, expected, enabledRuleIds, false);
+    if (!normalizedItem || seen.has(normalizedItem.itemId)) continue;
+    seen.add(normalizedItem.itemId);
+    normalized.push(normalizedItem);
   }
   return expectedItemIds.flatMap((id) => {
     const result = normalized.find((item) => item.itemId === id);
     return result ? [result] : [];
   });
+}
+
+function normalizeItem(
+  item: Record<string, unknown>,
+  expectedItemIds: Set<string>,
+  enabledRuleIds: Set<string>,
+  strict: boolean,
+): ClassificationResult | undefined {
+  if (
+    typeof item.itemId !== "string" ||
+    typeof item.ruleId !== "string" ||
+    !expectedItemIds.has(item.itemId) ||
+    !enabledRuleIds.has(item.ruleId)
+  ) {
+    if (strict) throw new MalformedClassificationResponseError();
+    return undefined;
+  }
+  if (!Object.hasOwn(item, "reason")) return { itemId: item.itemId, ruleId: item.ruleId };
+  if (typeof item.reason !== "string") {
+    if (strict) throw new MalformedClassificationResponseError();
+    return undefined;
+  }
+  const reason = item.reason.trim();
+  if (!reason || reason.length > 500) {
+    if (strict) throw new MalformedClassificationResponseError();
+    return undefined;
+  }
+  return { itemId: item.itemId, ruleId: item.ruleId, reason };
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: string[]): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every((key) => allowedKeys.has(key));
 }
