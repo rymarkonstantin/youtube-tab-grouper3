@@ -113,4 +113,37 @@ describe("ProviderChainClassifier", () => {
     ).rejects.toThrow("connection refused");
     expect(remote.classify).not.toHaveBeenCalled();
   });
+
+  it("does not fall back when cancellation aborts the local classifier", async () => {
+    const config = createDefaultClassifierConfig();
+    config.remote = {
+      enabled: true,
+      endpoint: "https://classifier.example",
+      model: "model",
+      apiKey: "key",
+    };
+    const controller = new AbortController();
+    const local = provider("ollama", {
+      classify: async () => {
+        controller.abort(new DOMException("Cancelled", "AbortError"));
+        throw controller.signal.reason;
+      },
+    });
+    const remote = provider("remote");
+    const fallback = vi.fn();
+    const classifier = new ProviderChainClassifier({
+      config,
+      providers: { ollama: local, remote },
+      signal: controller.signal,
+      onFallback: fallback,
+    });
+
+    await expect(
+      classifier.classify(input.items, input.rules, input.fallbackRuleId),
+    ).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(remote.classify).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+  });
 });

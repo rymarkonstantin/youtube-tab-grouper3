@@ -57,10 +57,12 @@ export class ProviderChainClassifier {
     rules: GroupRule[],
     fallbackRuleId: string,
   ): Promise<ClassificationResult[]> {
+    throwIfAborted(this.signal);
     const provider = await this.resolveProvider();
     try {
       return await provider.classify({ items, rules, fallbackRuleId }, this.signal);
     } catch (error) {
+      if (this.signal.aborted) throw abortError(this.signal);
       if (!this.canTryRemote(provider.id)) throw error;
       const next = await this.advanceToRemote(provider.id, error);
       return next.classify({ items, rules, fallbackRuleId }, this.signal);
@@ -69,6 +71,7 @@ export class ProviderChainClassifier {
 
   private async resolveProvider(): Promise<SemanticClassifierProvider> {
     while (this.providerIndex < this.providerIds.length) {
+      throwIfAborted(this.signal);
       const providerId = this.providerIds[this.providerIndex];
       if (providerId === undefined) break;
       const provider = this.providers[providerId];
@@ -103,12 +106,23 @@ export class ProviderChainClassifier {
     from: ClassifierProviderId,
     reason: unknown,
   ): Promise<SemanticClassifierProvider> {
+    throwIfAborted(this.signal);
     this.providerIndex++;
     const to = this.providerIds[this.providerIndex];
     if (to !== "remote") throw new ProviderUnavailableError("remote");
     this.onFallback(from, to, reason);
     return this.resolveProvider();
   }
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw abortError(signal);
+}
+
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException("The operation was aborted.", "AbortError");
 }
 
 export class ProviderUnavailableError extends Error {
