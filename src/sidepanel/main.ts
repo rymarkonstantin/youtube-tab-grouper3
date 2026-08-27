@@ -225,7 +225,7 @@ export function initializeSidePanel(): void {
     },
     { once: true },
   );
-   void startRun();
+  void startRun();
 }
 if (typeof document !== "undefined")
   document.addEventListener("DOMContentLoaded", initializeSidePanel, { once: true });
