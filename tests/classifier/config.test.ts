@@ -14,7 +14,33 @@ describe("hybrid classifier configuration", () => {
       mode: "automatic",
       local: { endpoint: "http://127.0.0.1:11434", model: "qwen2.5:3b-instruct" },
       remote: { enabled: false },
+      turboMode: false,
+      concurrency: 1,
     });
+  });
+
+  it.each([1, 2, 8])("accepts concurrency %s", (concurrency) => {
+    expect(validateClassifierConfig({ ...createDefaultClassifierConfig(), concurrency }).ok).toBe(
+      true,
+    );
+  });
+
+  it.each([0, 9, 1.5, "1", null])("rejects malformed concurrency %s", (concurrency) => {
+    const result = validateClassifierConfig({ ...createDefaultClassifierConfig(), concurrency });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues.map(({ path }) => path)).toContain("concurrency");
+  });
+
+  it.each([true, false])("accepts Turbo mode %s", (turboMode) => {
+    expect(validateClassifierConfig({ ...createDefaultClassifierConfig(), turboMode }).ok).toBe(
+      true,
+    );
+  });
+
+  it.each(["true", 1, null])("rejects malformed Turbo mode %s", (turboMode) => {
+    const result = validateClassifierConfig({ ...createDefaultClassifierConfig(), turboMode });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues.map(({ path }) => path)).toContain("turboMode");
   });
 
   it.each([

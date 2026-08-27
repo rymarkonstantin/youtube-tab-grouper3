@@ -27,12 +27,23 @@ function validateOrThrow(value: unknown): ClassifierConfig {
   return result.value;
 }
 
+function normalizeLegacyConfig(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const normalized = { ...record };
+  if (!Object.hasOwn(record, "turboMode")) normalized.turboMode = false;
+  if (!Object.hasOwn(record, "concurrency")) normalized.concurrency = 1;
+  return normalized;
+}
+
 export async function loadOrInitializeClassifierConfig(
   storage: StorageAreaLike,
 ): Promise<ClassifierConfig> {
   const stored = await storage.get(CLASSIFIER_CONFIG_STORAGE_KEY);
   if (Object.hasOwn(stored, CLASSIFIER_CONFIG_STORAGE_KEY)) {
-    return cloneConfig(validateOrThrow(stored[CLASSIFIER_CONFIG_STORAGE_KEY]));
+    return cloneConfig(
+      validateOrThrow(normalizeLegacyConfig(stored[CLASSIFIER_CONFIG_STORAGE_KEY])),
+    );
   }
 
   const defaults = createDefaultClassifierConfig();

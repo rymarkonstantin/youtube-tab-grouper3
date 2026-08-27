@@ -28,6 +28,29 @@ describe("classifier configuration storage", () => {
     expect(storage.setCalls).toHaveLength(0);
   });
 
+  it("loads legacy settings with new performance defaults", async () => {
+    const legacy = createDefaultClassifierConfig() as unknown as Record<string, unknown>;
+    delete legacy.turboMode;
+    delete legacy.concurrency;
+    const storage = new MemoryStorage({ classifierConfigV1: legacy });
+
+    await expect(loadOrInitializeClassifierConfig(storage)).resolves.toMatchObject({
+      turboMode: false,
+      concurrency: 1,
+    });
+    expect(storage.setCalls).toHaveLength(0);
+  });
+
+  it("rejects explicitly malformed new settings without overwriting storage", async () => {
+    const malformed = { ...createDefaultClassifierConfig(), concurrency: 0 };
+    const storage = new MemoryStorage({ classifierConfigV1: malformed });
+
+    await expect(loadOrInitializeClassifierConfig(storage)).rejects.toBeInstanceOf(
+      InvalidStoredClassifierConfigError,
+    );
+    expect(storage.setCalls).toHaveLength(0);
+  });
+
   it("does not overwrite invalid settings and recovers only through an explicit restore", async () => {
     const storage = new MemoryStorage({ classifierConfigV1: { schemaVersion: 99 } });
 

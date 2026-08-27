@@ -28,6 +28,7 @@ function classifierFingerprintContext(
   providerId: ClassifierProviderId;
   endpointOrigin: string;
   model: string;
+  turboMode: boolean;
 } {
   const provider = providerId === "ollama" ? config.local : config.remote;
   return {
@@ -35,6 +36,7 @@ function classifierFingerprintContext(
     providerId,
     endpointOrigin: endpointOrigin(provider.endpoint),
     model: provider.model,
+    turboMode: config.turboMode,
   };
 }
 

@@ -52,3 +52,66 @@ it("serializes only opaque IDs and approved metadata", () => {
   expect(prompt).not.toContain("secret-video-id");
   expect(prompt).not.toContain("pageType");
 });
+
+it("omits empty optional metadata in the normal prompt", () => {
+  const prompt = buildBatchPrompt([
+    {
+      itemId: "item-0",
+      metadata: { videoId: "v1", pageType: "watch", title: "A title" },
+    },
+  ]);
+  expect(prompt).toBe(JSON.stringify({ items: [{ itemId: "item-0", title: "A title" }] }));
+});
+
+it("applies exact Turbo transport limits", () => {
+  const prompt = buildBatchPrompt(
+    [
+      {
+        itemId: "item-0",
+        metadata: {
+          videoId: "v1",
+          pageType: "watch",
+          title: "t".repeat(250),
+          description: "d".repeat(700),
+          channelName: "c".repeat(150),
+          hashtags: [
+            "a".repeat(70),
+            "b".repeat(60),
+            "c".repeat(60),
+            "d".repeat(60),
+            "e".repeat(60),
+            "f".repeat(60),
+            "g".repeat(60),
+          ],
+          playlistTitle: "p".repeat(140),
+        },
+      },
+    ],
+    { turboMode: true },
+  );
+  const item = JSON.parse(prompt).items[0] as Record<string, unknown>;
+  expect(item.title).toHaveLength(200);
+  expect(item.description).toHaveLength(600);
+  expect(item.channelName).toHaveLength(100);
+  expect(item.hashtags).toEqual([
+    "a".repeat(60),
+    "b".repeat(60),
+    "c".repeat(60),
+    "d".repeat(60),
+    "e".repeat(60),
+    "f".repeat(60),
+  ]);
+  expect(item.playlistTitle).toHaveLength(120);
+});
+
+it("adds the optional short-reason instruction only for Turbo prompts", () => {
+  const rules = [
+    { id: "other", name: "Other", description: "Fallback.", color: "grey" as const, enabled: true },
+  ];
+  const normal = buildClassifierSystemPrompt(rules, "other");
+  const turbo = buildClassifierSystemPrompt(rules, "other", { turboMode: true });
+  expect(normal).not.toContain("12 words");
+  expect(turbo).toContain("reason");
+  expect(turbo).toContain("12 words");
+  expect(turbo).toContain("Uncategorized");
+});
