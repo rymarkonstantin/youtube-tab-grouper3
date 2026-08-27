@@ -22,6 +22,7 @@ import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
 import { diagnosticsCopyView, providerStatusView, type ProviderStatus } from "./provider-state";
 import { toPanelViewModel } from "./state";
+import { beginTimer, disposeTimer, endTimer, setTimerPhase } from "./timer-ui";
 
 let currentRun: { controller: AbortController } | undefined;
 let lastDiagnostics: RunDiagnostics | undefined;
@@ -44,6 +45,7 @@ function renderDiagnosticsCopyAction(): void {
 }
 
 function render(state: PanelState): void {
+  if (state.kind === "running") setTimerPhase(state.progress.phase);
   const view = toPanelViewModel(state);
   const status = document.querySelector<HTMLElement>("#status");
   if (status) status.textContent = `${view.heading}: ${view.message}`;
