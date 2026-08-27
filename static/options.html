@@ -9,14 +9,75 @@
   <body>
     <main>
       <h1>Grouping categories</h1>
-      <p>Categories describe subject matter semantically. Rule order breaks equal topical matches. Managed groups use the reserved <code>YT · </code> prefix.</p>
+      <p>
+        Categories describe subject matter semantically. Rule order breaks equal topical matches.
+        Managed groups use the reserved <code>YT · </code> prefix.
+      </p>
       <div id="rules"></div>
       <button id="add" type="button">Add category</button>
-      <button id="save" type="button">Save</button>
+      <button id="save" type="button">Save categories</button>
       <button id="restore" type="button">Restore defaults</button>
-    <button id="clear-cache" type="button">Clear classification cache</button>
-    <p id="status" aria-live="polite"></p>
-    <ul id="validation-issues" aria-live="polite"></ul>
+      <button id="clear-cache" type="button">Clear classification cache</button>
+
+      <section aria-labelledby="classifier-heading">
+        <h2 id="classifier-heading">Semantic classifier</h2>
+        <p>
+          Local Ollama keeps classification on this device. A remote fallback is optional and only
+          receives the metadata needed for the current YouTube tabs after you explicitly enable it.
+        </p>
+        <label>
+          Mode
+          <select id="classifier-mode">
+            <option value="local-only">Local only</option>
+            <option value="automatic">Automatic (local first)</option>
+            <option value="remote-only">Remote only</option>
+          </select>
+        </label>
+        <fieldset>
+          <legend>Local Ollama</legend>
+          <label>
+            Endpoint
+            <input id="local-endpoint" type="url" inputmode="url" />
+          </label>
+          <label>
+            Model
+            <input id="local-model" type="text" />
+          </label>
+          <p>Install Ollama separately, start it, then pull the selected model.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Optional remote fallback</legend>
+          <label>
+            <input id="remote-enabled" type="checkbox" />
+            Enable configured remote fallback
+          </label>
+          <label>
+            Endpoint
+            <input id="remote-endpoint" type="url" inputmode="url" autocomplete="off" />
+          </label>
+          <label>
+            Model
+            <input id="remote-model" type="text" autocomplete="off" />
+          </label>
+          <label>
+            API key
+            <input id="remote-api-key" type="password" autocomplete="new-password" />
+          </label>
+          <p id="remote-status" aria-live="polite"></p>
+          <button id="request-remote-permission" type="button">Allow remote endpoint</button>
+        </fieldset>
+        <label>
+          <input id="diagnostics-enabled" type="checkbox" />
+          Enable local, redacted diagnostic logging
+        </label>
+        <div>
+          <button id="save-classifier" type="button">Save classifier settings</button>
+          <button id="restore-classifier" type="button">Restore classifier defaults</button>
+        </div>
+      </section>
+
+      <p id="status" aria-live="polite"></p>
+      <ul id="validation-issues" aria-live="polite"></ul>
     </main>
     <script type="module" src="options.js"></script>
   </body>

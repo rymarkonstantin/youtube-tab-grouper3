@@ -1,5 +1,6 @@
 import { fingerprintClassificationRules, fingerprintMetadata } from "../cache/fingerprint";
 import { createClassificationWorkItems } from "../cache/work-items";
+import { selectProviderChain } from "../classifier/config";
 import { applyGroupingPlan } from "../grouping/apply";
 import { buildGroupingPlan } from "../grouping/plan";
 import { revalidateGroupingPlan } from "../grouping/revalidate";
@@ -8,6 +9,7 @@ import type { RunDependencies, RunOptions, RunProgress, RunSummary } from "./typ
 
 const phase = (options: RunOptions, value: RunProgress["phase"], total: number): void => {
   options.signal.throwIfAborted();
+  options.diagnostics?.startPhase(value);
   options.onProgress({ phase: value, completed: 0, total });
 };
 export async function runGrouping(deps: RunDependencies, options: RunOptions): Promise<RunSummary> {
@@ -21,10 +23,19 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   const successfulMetadata = metadataResults.filter(
     (result): result is Extract<typeof result, { ok: true }> => result.ok,
   );
+  for (const result of metadataResults)
+    options.diagnostics?.recordMetadataResult(result.ok, result.ok ? undefined : result.error);
   let failed = metadataResults.filter((result) => !result.ok).length;
   const skipped = tabs.length - metadataResults.length;
   phase(options, "cache", successfulMetadata.length);
-  const rulesFingerprint = await fingerprintClassificationRules(rules);
+  const configuredProviderId = deps.classifierConfig
+    ? selectProviderChain(deps.classifierConfig)[0]
+    : undefined;
+  const rulesFingerprint = await fingerprintClassificationRules(
+    rules,
+    deps.classifierConfig,
+    deps.classifier.activeProviderId ?? configuredProviderId,
+  );
   const classifications = new Map<number, ClassificationResult>();
   const uncached: Array<{
     tabId: number;
@@ -49,24 +60,39 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   const work = await createClassificationWorkItems(uncached, rulesFingerprint);
   if (work.items.length > 0) {
     phase(options, "classifying", work.items.length);
-    const results = await deps.classifier.classify(
-      work.items.map(({ item }) => item),
-      rules.rules,
-      rules.fallbackRuleId,
-    );
+    let results: ClassificationResult[];
+    let classificationFailed = false;
+    try {
+      options.diagnostics?.recordBatch(work.items.length);
+      results = await deps.classifier.classify(
+        work.items.map(({ item }) => item),
+        rules.rules,
+        rules.fallbackRuleId,
+      );
+    } catch (error) {
+      options.diagnostics?.recordFailure("classification", error);
+      failed += work.items.reduce((total, item) => total + item.tabIds.length, 0);
+      classificationFailed = true;
+      results = [];
+    }
     const byId = new Map(results.map((result) => [result.itemId, result]));
     const entries = [];
+    const finalRulesFingerprint = await fingerprintClassificationRules(
+      rules,
+      deps.classifierConfig,
+      deps.classifier.activeProviderId ?? configuredProviderId,
+    );
     for (const item of work.items) {
       const result = byId.get(item.item.itemId);
       if (!result) {
-        failed += item.tabIds.length;
+        if (!classificationFailed) failed += item.tabIds.length;
         continue;
       }
       for (const tabId of item.tabIds) classifications.set(tabId, result);
       entries.push({
         videoId: item.item.metadata.videoId,
         metadataFingerprint: item.metadataFingerprint,
-        rulesFingerprint,
+        rulesFingerprint: finalRulesFingerprint,
         ruleId: result.ruleId,
       });
     }
@@ -90,10 +116,12 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   options.signal.throwIfAborted();
   phase(options, "applying", revalidated.groups.length);
   const applied = await applyGroupingPlan(revalidated, deps.groups);
+  for (const _ruleId of applied.failedRuleIds)
+    options.diagnostics?.recordFailure("grouping", "request-failed");
   const uncategorized = applied.appliedRuleIds.includes(rules.fallbackRuleId)
     ? (revalidated.groups.find(({ ruleId }) => ruleId === rules.fallbackRuleId)?.tabIds.length ?? 0)
     : 0;
-  return {
+  const summary = {
     eligible: successfulMetadata.length,
     grouped: applied.groupedTabIds.length,
     cached,
@@ -103,4 +131,6 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
     appliedRuleIds: applied.appliedRuleIds,
     failedRuleIds: applied.failedRuleIds,
   };
+  options.diagnostics?.complete(summary);
+  return summary;
 }
