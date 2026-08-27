@@ -89,11 +89,7 @@ export function validateRuleConfig(value: unknown): RuleConfigValidation {
       addIssue(issues, `${path}.name`, "Rule name must be a string.");
     } else {
       normalizedName = name.trim();
-      if (
-        normalizedName.length < 1 ||
-        normalizedName.length > 60 ||
-        hasControlCharacter(name)
-      ) {
+      if (normalizedName.length < 1 || normalizedName.length > 60 || hasControlCharacter(name)) {
         addIssue(
           issues,
           `${path}.name`,
