@@ -25,10 +25,10 @@ describe("toPanelViewModel", () => {
     expect(view.message).toContain("1 failed");
     expect(view.runAgainVisible).toBe(true);
   });
-  it("distinguishes unavailable AI and invalid configuration", () => {
+  it("distinguishes unavailable classifier and invalid configuration", () => {
     expect(
       toPanelViewModel({ kind: "unavailable", message: "LanguageModel unavailable" }).heading,
-    ).toBe("Built-in AI unavailable");
+    ).toBe("Classifier unavailable");
     expect(
       toPanelViewModel({ kind: "configuration-error", message: "Duplicate names" }).editVisible,
     ).toBe(true);
