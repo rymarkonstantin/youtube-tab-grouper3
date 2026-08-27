@@ -293,6 +293,52 @@ describe("OllamaClassifierProvider", () => {
     );
   });
 
+  it("splits large classification inputs into bounded requests", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      itemId: `video-${index}`,
+      metadata: {
+        videoId: `video-${index}`,
+        pageType: "watch" as const,
+        title: `Video ${index}`,
+        description: "Description",
+        channelName: "Channel",
+      },
+    }));
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+      const requestItems = JSON.parse(body.messages[1]?.content ?? "{}").items as Array<{
+        itemId: string;
+      }>;
+      return jsonResponse({
+        message: {
+          content: JSON.stringify({
+            results: requestItems.map(({ itemId }) => ({
+              itemId,
+              ruleId: "uncategorized",
+              reason: "No specific topic matches.",
+            })),
+          }),
+        },
+      });
+    });
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher,
+    });
+
+    await expect(
+      provider.classify({ ...input, items }, new AbortController().signal),
+    ).resolves.toHaveLength(5);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const batchSizes: number[] = [];
+    for (const [, init] of fetcher.mock.calls) {
+      const body = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+      batchSizes.push(JSON.parse(body.messages[1]?.content ?? "{}").items.length);
+    }
+    expect(batchSizes).toEqual([4, 1]);
+  });
+
   it("maps an unavailable Ollama runtime to a typed provider error", async () => {
     const provider = new OllamaClassifierProvider({
       endpoint: "http://127.0.0.1:11434",
