@@ -1,4 +1,5 @@
 import type { RunProgress, RunSummary } from "../run/types";
+import { classificationProgressView } from "./provider-state";
 export type PanelState =
   | { kind: "checking" }
   | { kind: "needs-activation"; capability: string }
@@ -42,7 +43,10 @@ export function toPanelViewModel(state: PanelState): PanelViewModel {
     case "running":
       return {
         heading: "Grouping YouTube tabs",
-        message: `Working: ${state.progress.phase}`,
+        message:
+          state.progress.classification === undefined
+            ? `Working: ${state.progress.phase}`
+            : `Working: ${state.progress.phase}. ${classificationProgressView(state.progress.classification)}`,
         progress: { value: state.progress.completed, max: Math.max(state.progress.total, 1) },
         prepareVisible: false,
         cancelVisible: true,

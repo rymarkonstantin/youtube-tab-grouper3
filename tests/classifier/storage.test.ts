@@ -22,6 +22,8 @@ describe("classifier configuration storage", () => {
     const custom = createDefaultClassifierConfig();
     custom.local.model = "llama3.2:3b";
     custom.diagnosticsEnabled = true;
+    custom.turboMode = true;
+    custom.concurrency = 4;
     const storage = new MemoryStorage({ classifierConfigV1: custom });
 
     await expect(loadOrInitializeClassifierConfig(storage)).resolves.toEqual(custom);

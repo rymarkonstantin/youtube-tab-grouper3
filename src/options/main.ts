@@ -16,7 +16,7 @@ import {
   saveRuleConfig,
 } from "../rules/storage";
 import type { RuleValidationIssue } from "../rules/validation";
-import { classifierSettingsView } from "./classifier-state";
+import { classifierSettingsCacheImpact, classifierSettingsView } from "./classifier-state";
 import { addRule, deleteRule, moveRule, updateRule } from "./state";
 
 type ValidationIssue = RuleValidationIssue | ClassifierConfigValidationIssue;
@@ -61,6 +61,10 @@ function readChecked(id: string): boolean {
   return document.querySelector<HTMLInputElement>(`#${id}`)?.checked ?? false;
 }
 
+function readNumber(id: string): number {
+  return Number(document.querySelector<HTMLInputElement>(`#${id}`)?.value);
+}
+
 function updateClassifierFromForm(): void {
   const current = getClassifierConfig();
   const mode = document.querySelector<HTMLSelectElement>("#classifier-mode")?.value;
@@ -76,6 +80,8 @@ function updateClassifierFromForm(): void {
       apiKey: readText("remote-api-key"),
     },
     diagnosticsEnabled: readChecked("diagnostics-enabled"),
+    turboMode: readChecked("turbo-mode"),
+    concurrency: readNumber("concurrency"),
   };
 }
 
@@ -183,6 +189,8 @@ function renderClassifierSettings(): void {
   setValue("remote-model", classifierConfig.remote.model);
   setValue("remote-api-key", classifierConfig.remote.apiKey);
   setChecked("diagnostics-enabled", classifierConfig.diagnosticsEnabled);
+  setChecked("turbo-mode", classifierConfig.turboMode);
+  setValue("concurrency", String(classifierConfig.concurrency));
   void renderRemoteStatus();
 }
 
@@ -203,6 +211,8 @@ function registerClassifierControls(): void {
     "remote-model",
     "remote-api-key",
     "diagnostics-enabled",
+    "turbo-mode",
+    "concurrency",
   ]) {
     document.querySelector<HTMLElement>(`#${id}`)?.addEventListener("change", () => {
       if (!classifierConfig) return;
@@ -214,11 +224,19 @@ function registerClassifierControls(): void {
     .querySelector<HTMLButtonElement>("#save-classifier")
     ?.addEventListener("click", async () => {
       try {
+        const previous = getClassifierConfig();
         updateClassifierFromForm();
-        classifierConfig = await saveClassifierConfig(chrome.storage.local, getClassifierConfig());
-        await new ClassificationCacheRepository(chrome.storage.local).clear();
+        const next = getClassifierConfig();
+        const cacheImpact = classifierSettingsCacheImpact(previous, next);
+        classifierConfig = await saveClassifierConfig(chrome.storage.local, next);
+        if (cacheImpact.clearClassificationCache)
+          await new ClassificationCacheRepository(chrome.storage.local).clear();
         renderValidationIssues([]);
-        showStatus("Classifier settings saved and cache cleared.");
+        showStatus(
+          cacheImpact.clearClassificationCache
+            ? "Classifier settings saved and semantic cache cleared."
+            : "Classifier settings saved; semantic cache preserved.",
+        );
         renderClassifierSettings();
       } catch (error) {
         showStatus(error instanceof Error ? error.message : "Unable to save classifier settings.");
@@ -232,10 +250,17 @@ function registerClassifierControls(): void {
     ?.addEventListener("click", async () => {
       if (!window.confirm("Restore default classifier settings?")) return;
       try {
+        const previous = getClassifierConfig();
         classifierConfig = await restoreDefaultClassifierConfig(chrome.storage.local);
-        await new ClassificationCacheRepository(chrome.storage.local).clear();
+        const cacheImpact = classifierSettingsCacheImpact(previous, classifierConfig);
+        if (cacheImpact.clearClassificationCache)
+          await new ClassificationCacheRepository(chrome.storage.local).clear();
         renderValidationIssues([]);
-        showStatus("Classifier defaults restored and cache cleared.");
+        showStatus(
+          cacheImpact.clearClassificationCache
+            ? "Classifier defaults restored and semantic cache cleared."
+            : "Classifier defaults restored; semantic cache preserved.",
+        );
         renderClassifierSettings();
       } catch (error) {
         showStatus(

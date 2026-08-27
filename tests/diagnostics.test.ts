@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RunDiagnostics } from "../src/diagnostics";
+import type { ClassificationBatchProgress } from "../src/classifier/batching";
 
 describe("RunDiagnostics", () => {
   it("records aggregate provider and phase events without browsing metadata", () => {
@@ -45,5 +46,40 @@ describe("RunDiagnostics", () => {
     diagnostics.recordFailure("metadata", new Error("private title"));
 
     expect(diagnostics.toText()).toBe("Diagnostics are disabled.");
+  });
+
+  it("reports only aggregate Turbo, concurrency, and batch recovery counters", () => {
+    const diagnostics = new RunDiagnostics(true);
+    const configure = (
+      diagnostics as unknown as {
+        configureClassification(value: {
+          turboMode: boolean;
+          concurrency: number;
+          itemCount: number;
+        }): void;
+      }
+    ).configureClassification;
+    const recordProgress = (
+      diagnostics as unknown as {
+        recordBatchProgress(value: ClassificationBatchProgress): void;
+      }
+    ).recordBatchProgress;
+
+    configure.call(diagnostics, { turboMode: true, concurrency: 3, itemCount: 12 });
+    recordProgress.call(diagnostics, {
+      startedBatchCount: 4,
+      completedBatchCount: 3,
+      completedItemCount: 10,
+      splitCount: 1,
+      recoveredItemCount: 2,
+      failedItemCount: 1,
+    } as ClassificationBatchProgress);
+
+    const report = diagnostics.toText();
+    expect(report).toContain("classifier settings: turbo: on; concurrency: 3");
+    expect(report).toContain("classification batches: 3/4; items: 10/12");
+    expect(report).toContain("splits: 1; recovered: 2; failed items: 1");
+    expect(report).not.toContain("private");
+    expect(report).not.toContain("reason");
   });
 });

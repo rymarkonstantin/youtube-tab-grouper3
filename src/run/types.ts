@@ -1,4 +1,5 @@
 import type { ClassificationCacheRepository } from "../cache/storage";
+import type { ClassificationBatchProgress } from "../classifier/batching";
 import type { GroupsPort } from "../chrome/groups";
 import type { TabsPort } from "../chrome/tabs";
 import type { ClassifierConfig } from "../classifier/config";
@@ -18,6 +19,7 @@ export interface RunProgress {
   completed: number;
   total: number;
   download?: { capability: string; loaded: number };
+  classification?: ClassificationBatchProgress & { configuredConcurrency: number };
 }
 export interface RunSummary {
   eligible: number;
@@ -38,6 +40,7 @@ export interface VideoClassifier {
 }
 export interface ProviderAwareVideoClassifier extends VideoClassifier {
   readonly activeProviderId?: "ollama" | "remote" | undefined;
+  setBatchProgressListener?(listener: (progress: ClassificationBatchProgress) => void): void;
 }
 export interface RunDependencies {
   loadRules(): Promise<RuleConfig>;
