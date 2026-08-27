@@ -154,6 +154,11 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
       if (signal.aborted) throw abortError(signal);
       if (timedOut) throw new OllamaProviderError("timeout");
       if (error instanceof OllamaProviderError) throw error;
+      console.warn("[youtube-tab-grouper3] ollama:request:error", {
+        path,
+        errorType: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : undefined,
+      });
       throw new OllamaProviderError("unavailable");
     } finally {
       clearTimeout(timeout);

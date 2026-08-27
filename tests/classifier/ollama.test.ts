@@ -77,6 +77,27 @@ describe("OllamaClassifierProvider", () => {
     });
   });
 
+  it("logs safe request details when the local runtime fetch fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    await provider.health(new AbortController().signal);
+
+    expect(warn).toHaveBeenCalledWith(
+      "[youtube-tab-grouper3] ollama:request:error",
+      expect.objectContaining({
+        path: "/api/show",
+        errorType: "TypeError",
+        errorMessage: "Failed to fetch",
+      }),
+    );
+    warn.mockRestore();
+  });
+
   it("checks the configured model during health reporting", async () => {
     const fetcher = vi.fn((url: RequestInfo | URL) =>
       Promise.resolve(
