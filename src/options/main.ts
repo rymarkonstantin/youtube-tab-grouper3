@@ -83,6 +83,17 @@ function render(): void {
 }
 async function initialize(): Promise<void> {
   const status = document.querySelector<HTMLElement>("#status");
+  document.querySelector<HTMLButtonElement>("#restore")?.addEventListener("click", async () => {
+    if (!window.confirm("Restore default categories?")) return;
+    config = await restoreDefaultRuleConfig(chrome.storage.local);
+    await new ClassificationCacheRepository(chrome.storage.local).clear();
+    for (const id of ["rules", "add", "save", "clear-cache"]) {
+      const element = document.querySelector<HTMLElement>(`#${id}`);
+      if (element) element.hidden = false;
+    }
+    render();
+    if (status) status.textContent = "Defaults restored and cache cleared.";
+  });
   try {
     config = await loadOrInitializeRuleConfig(chrome.storage.local);
     render();
@@ -108,13 +119,6 @@ async function initialize(): Promise<void> {
     } catch (error) {
       if (status) status.textContent = error instanceof Error ? error.message : "Unable to save.";
     }
-  });
-  document.querySelector<HTMLButtonElement>("#restore")?.addEventListener("click", async () => {
-    if (!window.confirm("Restore default categories?")) return;
-    config = await restoreDefaultRuleConfig(chrome.storage.local);
-    await new ClassificationCacheRepository(chrome.storage.local).clear();
-    render();
-    if (status) status.textContent = "Defaults restored and cache cleared.";
   });
   document.querySelector<HTMLButtonElement>("#clear-cache")?.addEventListener("click", async () => {
     if (!window.confirm("Clear classification cache?")) return;

@@ -29,9 +29,28 @@ function render(state: PanelState): void {
     ["prepare", view.prepareVisible],
     ["cancel", view.cancelVisible],
     ["run-again", view.runAgainVisible],
+    ["edit", view.editVisible],
   ] as const) {
     const button = document.querySelector<HTMLButtonElement>(`#${id}`);
     if (button) button.hidden = !visible;
+  }
+  const summary = document.querySelector<HTMLUListElement>("#summary");
+  if (summary) {
+    summary.replaceChildren();
+    if (state.kind === "complete") {
+      for (const [label, value] of [
+        ["Eligible", state.summary.eligible],
+        ["Grouped", state.summary.grouped],
+        ["Cached", state.summary.cached],
+        ["Uncategorized", state.summary.uncategorized],
+        ["Skipped", state.summary.skipped],
+        ["Failed", state.summary.failed],
+      ] as const) {
+        const item = document.createElement("li");
+        item.textContent = `${label}: ${value}`;
+        summary.append(item);
+      }
+    }
   }
 }
 
@@ -55,8 +74,13 @@ async function startRun(allowDownloads: boolean): Promise<void> {
       {
         allowDownloads,
         signal: controller.signal,
-        onDownloadProgress: () => undefined,
-        onPhase: () => undefined,
+        onDownloadProgress: (download) => {
+          const status = document.querySelector<HTMLElement>("#status");
+          if (status)
+            status.textContent = `Grouping YouTube tabs: Downloading ${download.capability} (${download.loaded})`;
+        },
+        onPhase: (phase) =>
+          render({ kind: "running", progress: { phase, completed: 0, total: 1 } }),
       },
     );
     const summary: RunSummary = await runGrouping(
@@ -74,7 +98,7 @@ async function startRun(allowDownloads: boolean): Promise<void> {
     );
     render({ kind: "complete", summary });
     setBadge(
-      summary.failed ? "!" : String(Math.min(summary.grouped, 999)),
+      summary.failed ? "!" : summary.grouped > 999 ? "999+" : String(summary.grouped),
       summary.failed ? "#b3261e" : "#188038",
     );
   } catch (error) {
@@ -112,17 +136,26 @@ export function initializeSidePanel(): void {
     const pending = currentRun?.pending;
     if (!pending || !navigator.userActivation.isActive) return;
     const controller = new AbortController();
-    void pending.prepare({ signal: controller.signal, onDownloadProgress: () => undefined }).then(
-      () => {
-        currentRun = undefined;
-        void startRun(false);
-      },
-      (error: unknown) =>
-        render({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Preparation failed.",
-        }),
-    );
+    void pending
+      .prepare({
+        signal: controller.signal,
+        onDownloadProgress: (loaded) => {
+          const status = document.querySelector<HTMLElement>("#status");
+          if (status)
+            status.textContent = `AI preparation: Downloading ${pending.capability} (${loaded})`;
+        },
+      })
+      .then(
+        () => {
+          currentRun = undefined;
+          void startRun(false);
+        },
+        (error: unknown) =>
+          render({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Preparation failed.",
+          }),
+      );
   });
   window.addEventListener("pagehide", () => currentRun?.controller.abort(), { once: true });
   void startRun(false);
