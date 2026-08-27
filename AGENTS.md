@@ -124,6 +124,18 @@ task or bundle handoff.
 - Do not edit the design specification or implementation plan to hide unfinished work; update them
   only when a reviewed architectural decision or workflow change is actually required.
 
+### Version increments
+
+- Treat `package.json` as the release version source of truth; keep the packaged manifest version in
+  sync with it.
+- Use PATCH for backward-compatible fixes, diagnostics, performance improvements, and UI corrections.
+- Use MINOR for new backward-compatible user-visible capabilities.
+- Use MAJOR for breaking storage/configuration/behavior changes, removed behavior, a higher Chrome
+  minimum, or material permission/privacy changes.
+- Documentation-, test-, and development-only changes do not require a version bump unless they are
+  packaged for Chrome distribution.
+- Every uploaded Chrome package must have a higher version than the previously uploaded package.
+
 ## Bundle Handoff
 
 At each bundle boundary, report:
