@@ -54,7 +54,7 @@ export class RemoteClassifierProvider implements SemanticClassifierProvider {
     const enabledRules = input.rules.filter(({ enabled }) => enabled);
     const itemIds = input.items.map(({ itemId }) => itemId);
     const enabledRuleIds = enabledRules.map(({ id }) => id);
-    const response = await this.request(
+    const content = await this.request(
       {
         method: "POST",
         headers: {
@@ -82,11 +82,10 @@ export class RemoteClassifierProvider implements SemanticClassifierProvider {
       },
       signal,
     );
-    const content = await readChoiceContent(response);
     return parseClassificationResponse(content, itemIds, new Set(enabledRuleIds));
   }
 
-  private async request(init: RequestInit, signal: AbortSignal): Promise<Response> {
+  private async request(init: RequestInit, signal: AbortSignal): Promise<string> {
     if (signal.aborted) throw abortError(signal);
     const controller = new AbortController();
     let timedOut = false;
@@ -99,11 +98,15 @@ export class RemoteClassifierProvider implements SemanticClassifierProvider {
     try {
       const response = await this.fetcher(this.endpoint, { ...init, signal: controller.signal });
       if (!response.ok) throw new RemoteProviderError("request-failed");
-      return response;
+      return await readChoiceContent(response);
     } catch (error) {
       if (signal.aborted) throw abortError(signal);
       if (timedOut) throw new RemoteProviderError("timeout");
-      if (error instanceof RemoteProviderError) throw error;
+      if (
+        error instanceof RemoteProviderError ||
+        error instanceof MalformedClassificationResponseError
+      )
+        throw error;
       throw new RemoteProviderError("unavailable");
     } finally {
       clearTimeout(timeout);

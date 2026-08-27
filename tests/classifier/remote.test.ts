@@ -173,6 +173,40 @@ describe("RemoteClassifierProvider", () => {
     await expectation;
   });
 
+  it("keeps the deadline active until the response body finishes parsing", async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const response = new Response(JSON.stringify({ choices: [] }));
+    vi.spyOn(response, "json").mockImplementation(
+      () =>
+        new Promise<unknown>((_resolve, reject) => {
+          requestSignal?.addEventListener("abort", () =>
+            reject(new DOMException("Timed out", "AbortError")),
+          );
+        }),
+    );
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return Promise.resolve(response);
+    });
+    const provider = new RemoteClassifierProvider({
+      endpoint: "https://api.example.test/v1",
+      model: "semantic-model",
+      apiKey: "remote-secret",
+      timeoutMs: 100,
+      fetcher,
+    });
+
+    const result = provider.classify(input, new AbortController().signal);
+    const outcome = result.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(requestSignal?.aborted).toBe(true);
+    await expect(outcome).resolves.toMatchObject({
+      code: "timeout",
+    } satisfies Partial<RemoteProviderError>);
+  });
+
   it("preserves caller cancellation instead of treating it as a provider failure", async () => {
     const controller = new AbortController();
     const fetcher = vi.fn(
