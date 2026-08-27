@@ -1,6 +1,8 @@
 import type { ClassificationCacheRepository } from "../cache/storage";
 import type { GroupsPort } from "../chrome/groups";
 import type { TabsPort } from "../chrome/tabs";
+import type { ClassifierConfig } from "../classifier/config";
+import type { RunDiagnostics } from "../diagnostics";
 import type { ClassificationItem, ClassificationResult, GroupRule, RuleConfig } from "../types";
 export type RunPhase =
   | "checking"
@@ -34,14 +36,19 @@ export interface VideoClassifier {
     fallbackRuleId: string,
   ): Promise<ClassificationResult[]>;
 }
+export interface ProviderAwareVideoClassifier extends VideoClassifier {
+  readonly activeProviderId?: "ollama" | "remote" | undefined;
+}
 export interface RunDependencies {
   loadRules(): Promise<RuleConfig>;
   cache: Pick<ClassificationCacheRepository, "find" | "put">;
   tabs: TabsPort;
   groups: GroupsPort;
-  classifier: VideoClassifier;
+  classifier: ProviderAwareVideoClassifier;
+  classifierConfig?: ClassifierConfig;
 }
 export interface RunOptions {
   signal: AbortSignal;
   onProgress(progress: RunProgress): void;
+  diagnostics?: RunDiagnostics;
 }

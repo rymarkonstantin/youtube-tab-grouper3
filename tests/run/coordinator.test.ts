@@ -48,4 +48,20 @@ describe("runGrouping", () => {
     await runGrouping(deps, runOptions());
     expect(events.indexOf("classification-finished")).toBeLessThan(events.indexOf("group-call"));
   });
+  it("leaves only classifier-failed tabs unchanged while still grouping cached tabs", async () => {
+    const deps = fakeRunDependencies({
+      tabs: [videoTab(10, "cached"), videoTab(20, "uncached")],
+      metadata: [
+        videoMetadata("cached", "Cached programming video"),
+        videoMetadata("uncached", "Unavailable classifier video"),
+      ],
+      cacheHits: [{ videoId: "cached", ruleId: "programming" }],
+    });
+    deps.classifier.classify.mockRejectedValueOnce(new Error("provider unavailable"));
+
+    const summary = await runGrouping(deps, runOptions());
+
+    expect(summary).toMatchObject({ grouped: 1, cached: 1, failed: 1 });
+    expect(deps.groups.allPassedTabIds).toEqual([10]);
+  });
 });

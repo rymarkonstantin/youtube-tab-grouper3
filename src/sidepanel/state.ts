@@ -61,7 +61,7 @@ export function toPanelViewModel(state: PanelState): PanelViewModel {
       };
     case "unavailable":
       return {
-        heading: "Built-in AI unavailable",
+        heading: "Classifier unavailable",
         message: state.message,
         progress: null,
         prepareVisible: false,
