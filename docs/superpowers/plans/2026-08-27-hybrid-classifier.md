@@ -93,4 +93,4 @@
 
 ## Completion gate
 
-Tasks 1–7 are implemented and reviewed on `feature/hybrid-classifier`; PR #11 is open into `main`. The remaining acceptance work is manual Chrome validation: local-only Ollama operation, configured remote fallback and permission prompting, multilingual metadata, missing-runtime behavior, native group reuse, pinned-tab and navigation races, secret redaction, and deterministic repeated grouping. Merge only after CI/review and this manual acceptance matrix are complete.
+Tasks 1–7 were implemented and reviewed on `feature/hybrid-classifier` and merged into `main` via PR #11. Post-merge automated validation passed: 31 test files / 138 tests, formatting, lint, typecheck, build, and distribution manifest checks. Remaining acceptance work is manual Chrome validation: local-only Ollama operation, configured remote fallback and permission prompting, multilingual metadata, missing-runtime behavior, native group reuse, pinned-tab and navigation races, secret redaction, and deterministic repeated grouping.

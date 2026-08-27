@@ -1,7 +1,7 @@
 # YouTube Tab Grouper 3 — Hybrid Classifier Design
 
 **Date:** 2026-08-27  
-**Status:** Approved; implemented on `feature/hybrid-classifier` (PR #11)
+**Status:** Approved; implemented and merged via PR #11
 
 ## Problem
 
