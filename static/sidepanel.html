@@ -9,7 +9,15 @@
   <body>
     <main>
       <h1>YouTube Tab Grouper</h1>
-      <p>Group eligible YouTube tabs by their primary subject.</p>
+      <p id="status" aria-live="polite">Checking YouTube tabs…</p>
+      <progress id="progress" value="0" max="1" hidden></progress>
+      <ul id="summary" aria-label="Grouping summary"></ul>
+      <div class="actions">
+        <button id="prepare" type="button" hidden>Prepare AI</button>
+        <button id="cancel" type="button" hidden>Cancel</button>
+        <button id="run-again" type="button" hidden>Run again</button>
+        <button id="edit" type="button">Edit categories</button>
+      </div>
     </main>
     <script type="module" src="sidepanel.js"></script>
   </body>

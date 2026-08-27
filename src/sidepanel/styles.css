@@ -7,3 +7,13 @@ body {
   margin: 0;
   padding: 1rem;
 }
+
+main {
+  max-width: 32rem;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
