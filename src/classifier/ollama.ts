@@ -139,7 +139,7 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
       controller.abort();
     }, this.timeoutMs);
     try {
-      const response = await this.fetcher(`${this.endpoint}${path}`, {
+      const response = await this.fetcher.call(globalThis, `${this.endpoint}${path}`, {
         ...init,
         signal: controller.signal,
       });
