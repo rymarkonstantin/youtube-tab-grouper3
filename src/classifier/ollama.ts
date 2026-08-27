@@ -1,9 +1,13 @@
-import type { ClassificationResult } from "../types";
+import type { ClassificationResult, GroupRule } from "../types";
 import type { LocalClassifierConfig } from "./config";
 import { MalformedClassificationResponseError } from "./errors";
 import { buildBatchPrompt, buildClassifierSystemPrompt } from "./prompt";
 import type { ClassifierInput, ProviderHealth, SemanticClassifierProvider } from "./providers";
-import { createClassificationResponseSchema, parseClassificationResponse } from "./response";
+import {
+  createClassificationResponseSchema,
+  parseClassificationResponse,
+  parsePartialClassificationResponse,
+} from "./response";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -87,10 +91,56 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
     const enabledRules = input.rules.filter(({ enabled }) => enabled);
     const itemIds = input.items.map(({ itemId }) => itemId);
     const enabledRuleIds = enabledRules.map(({ id }) => id);
+    const enabledRuleIdSet = new Set(enabledRuleIds);
+    const content = await this.requestClassificationContent(input, enabledRules, itemIds, signal);
+    try {
+      return parseClassificationResponse(content, itemIds, enabledRuleIdSet);
+    } catch (error) {
+      if (!(error instanceof MalformedClassificationResponseError) || itemIds.length <= 1)
+        throw error;
+      const partial = parsePartialClassificationResponse(content, itemIds, enabledRuleIdSet);
+      const recovered = [...partial];
+      const recoveredIds = new Set(partial.map(({ itemId }) => itemId));
+      for (const item of input.items) {
+        if (recoveredIds.has(item.itemId)) continue;
+        try {
+          const retryContent = await this.requestClassificationContent(
+            { ...input, items: [item] },
+            enabledRules,
+            [item.itemId],
+            signal,
+          );
+          recovered.push(
+            ...parseClassificationResponse(retryContent, [item.itemId], enabledRuleIdSet),
+          );
+        } catch (retryError) {
+          if (signal.aborted) throw abortError(signal);
+          console.warn("[youtube-tab-grouper3] ollama:classification:item-failed", {
+            itemId: item.itemId,
+            errorType: retryError instanceof Error ? retryError.name : typeof retryError,
+          });
+        }
+      }
+      return itemIds.flatMap((itemId) => {
+        const result = recovered.find((item) => item.itemId === itemId);
+        return result ? [result] : [];
+      });
+    }
+  }
+
+  private async requestClassificationContent(
+    input: ClassifierInput,
+    enabledRules: GroupRule[],
+    itemIds: string[],
+    signal: AbortSignal,
+  ): Promise<string> {
     const body = {
       model: this.model,
       stream: false,
-      format: createClassificationResponseSchema(itemIds, enabledRuleIds),
+      format: createClassificationResponseSchema(
+        itemIds,
+        enabledRules.map(({ id }) => id),
+      ),
       messages: [
         {
           role: "system",
@@ -125,7 +175,7 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
         : undefined;
     if (content === undefined)
       throw new MalformedClassificationResponseError("Ollama response is missing message content.");
-    return parseClassificationResponse(content, itemIds, new Set(enabledRuleIds));
+    return content;
   }
 
   private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
