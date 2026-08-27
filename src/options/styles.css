@@ -7,3 +7,18 @@ body {
   margin: 0;
   padding: 1rem;
 }
+
+main {
+  max-width: 48rem;
+}
+fieldset {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+textarea {
+  min-height: 5rem;
+}
+button {
+  margin: 0.25rem;
+}
