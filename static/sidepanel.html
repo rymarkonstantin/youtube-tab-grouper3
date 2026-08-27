@@ -12,6 +12,10 @@
       <p id="status" aria-live="polite">Checking YouTube tabs…</p>
       <p id="provider-status" aria-live="polite"></p>
       <progress id="progress" value="0" max="1" hidden></progress>
+      <p id="timers" aria-live="off" hidden>
+        Total elapsed: <time id="total-elapsed">00:00</time><br />
+        Current operation: <time id="operation-elapsed">00:00</time>
+      </p>
       <ul id="summary" aria-label="Grouping summary"></ul>
       <div class="actions">
         <button id="prepare" type="button" hidden>Prepare AI</button>

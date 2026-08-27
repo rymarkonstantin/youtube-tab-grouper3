@@ -22,6 +22,7 @@ import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
 import { diagnosticsCopyView, providerStatusView, type ProviderStatus } from "./provider-state";
 import { toPanelViewModel } from "./state";
+import { beginTimer, disposeTimer, endTimer, setTimerPhase } from "./timer-ui";
 
 let currentRun: { controller: AbortController } | undefined;
 let lastDiagnostics: RunDiagnostics | undefined;
@@ -44,6 +45,7 @@ function renderDiagnosticsCopyAction(): void {
 }
 
 function render(state: PanelState): void {
+  if (state.kind === "running") setTimerPhase(state.progress.phase);
   const view = toPanelViewModel(state);
   const status = document.querySelector<HTMLElement>("#status");
   if (status) status.textContent = `${view.heading}: ${view.message}`;
@@ -93,6 +95,7 @@ async function startRun(): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
   currentRun = { controller };
+  beginTimer();
   diagnosticsEnabled = false;
   lastDiagnostics = undefined;
   renderDiagnosticsCopyAction();
@@ -155,6 +158,7 @@ async function startRun(): Promise<void> {
       },
     );
     render({ kind: "complete", summary });
+    endTimer();
     setBadge(
       summary.failed ? "!" : summary.grouped > 999 ? "999+" : String(summary.grouped),
       summary.failed ? "#b3261e" : "#188038",
@@ -181,6 +185,7 @@ async function startRun(): Promise<void> {
         kind: "error",
         message: error instanceof Error ? error.message : "Unexpected error.",
       });
+    endTimer();
   } finally {
     currentRun = undefined;
   }
@@ -214,6 +219,7 @@ export function initializeSidePanel(): void {
     "pagehide",
     () => {
       currentRun?.controller.abort();
+      disposeTimer();
       lastDiagnostics = undefined;
       renderDiagnosticsCopyAction();
     },
