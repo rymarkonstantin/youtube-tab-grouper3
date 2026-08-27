@@ -236,39 +236,22 @@ describe("OllamaClassifierProvider", () => {
     ]);
   });
 
-  it("retries only missing items when a batch response is incomplete", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          message: {
-            content: JSON.stringify({
-              results: [
-                {
-                  itemId: "video-1",
-                  ruleId: "programming",
-                  reason: "The first video is about software development.",
-                },
-              ],
-            }),
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          message: {
-            content: JSON.stringify({
-              results: [
-                {
-                  itemId: "video-2",
-                  ruleId: "uncategorized",
-                  reason: "The second video does not match a specific topic.",
-                },
-              ],
-            }),
-          },
-        }),
-      );
+  it("returns valid items from an incomplete batch without adapter retries", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          content: JSON.stringify({
+            results: [
+              {
+                itemId: "video-1",
+                ruleId: "programming",
+                reason: "The first video is about software development.",
+              },
+            ],
+          }),
+        },
+      }),
+    );
     const provider = new OllamaClassifierProvider({
       endpoint: "http://127.0.0.1:11434",
       model: "qwen2.5:3b-instruct",
@@ -281,19 +264,11 @@ describe("OllamaClassifierProvider", () => {
         ruleId: "programming",
         reason: "The first video is about software development.",
       },
-      {
-        itemId: "video-2",
-        ruleId: "uncategorized",
-        reason: "The second video does not match a specific topic.",
-      },
     ]);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).messages[1].content).toContain(
-      "Second video",
-    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("splits large classification inputs into bounded requests", async () => {
+  it("sends one transport request for each provider-chain batch", async () => {
     const items = Array.from({ length: 5 }, (_, index) => ({
       itemId: `video-${index}`,
       metadata: {
@@ -330,13 +305,55 @@ describe("OllamaClassifierProvider", () => {
     await expect(
       provider.classify({ ...input, items }, new AbortController().signal),
     ).resolves.toHaveLength(5);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    const batchSizes: number[] = [];
-    for (const [, init] of fetcher.mock.calls) {
-      const body = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
-      batchSizes.push(JSON.parse(body.messages[1]?.content ?? "{}").items.length);
-    }
-    expect(batchSizes).toEqual([4, 1]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ content: string }>;
+    };
+    expect(JSON.parse(body.messages[1]?.content ?? "{}").items).toHaveLength(5);
+  });
+
+  it("uses compact Turbo prompts for its transport request", async () => {
+    const fetcher = vi.fn().mockResolvedValue(validResponse());
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher,
+    });
+    const turboInput = {
+      ...input,
+      turboMode: true,
+      items: [
+        {
+          itemId: "video-1",
+          metadata: {
+            videoId: "abc",
+            pageType: "watch" as const,
+            title: "t".repeat(201),
+            description: "d".repeat(601),
+            channelName: "c".repeat(101),
+            hashtags: ["h".repeat(61), "two", "three", "four", "five", "six", "seven"],
+            playlistTitle: "p".repeat(121),
+          },
+        },
+      ],
+    };
+
+    await provider.classify(turboInput, new AbortController().signal);
+
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ content: string }>;
+    };
+    const sent = JSON.parse(body.messages[1]?.content ?? "{}") as {
+      items: Array<Record<string, unknown>>;
+    };
+    expect(body.messages[0]?.content).toContain("reason is optional");
+    expect(sent.items[0]).toMatchObject({
+      title: "t".repeat(200),
+      description: "d".repeat(600),
+      channelName: "c".repeat(100),
+      hashtags: ["h".repeat(60), "two", "three", "four", "five", "six"],
+      playlistTitle: "p".repeat(120),
+    });
   });
 
   it("maps an unavailable Ollama runtime to a typed provider error", async () => {
@@ -365,16 +382,14 @@ describe("OllamaClassifierProvider", () => {
     } satisfies Partial<OllamaProviderError>);
   });
 
-  it("rejects malformed model content through the shared response validator", async () => {
+  it("returns no results when model content is malformed", async () => {
     const provider = new OllamaClassifierProvider({
       endpoint: "http://127.0.0.1:11434",
       model: "qwen2.5:3b-instruct",
       fetcher: vi.fn().mockResolvedValue(jsonResponse({ message: { content: "not-json" } })),
     });
 
-    await expect(provider.classify(input, new AbortController().signal)).rejects.toBeInstanceOf(
-      MalformedClassificationResponseError,
-    );
+    await expect(provider.classify(input, new AbortController().signal)).resolves.toEqual([]);
   });
 
   it("maps malformed successful HTTP response bodies to a classification response error", async () => {
@@ -413,6 +428,41 @@ describe("OllamaClassifierProvider", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     await expectation;
+  });
+
+  it("keeps the deadline active until the model response body finishes parsing", async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const response = new Response(
+      JSON.stringify({ message: { content: JSON.stringify({ results: [] }) } }),
+    );
+    vi.spyOn(response, "json").mockImplementation(
+      () =>
+        new Promise<unknown>((_resolve, reject) => {
+          requestSignal?.addEventListener("abort", () =>
+            reject(new DOMException("Timed out", "AbortError")),
+          );
+        }),
+    );
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return Promise.resolve(response);
+    });
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      timeoutMs: 100,
+      fetcher,
+    });
+
+    const result = provider.classify(input, new AbortController().signal);
+    const outcome = result.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(requestSignal?.aborted).toBe(true);
+    await expect(outcome).resolves.toMatchObject({
+      code: "timeout",
+    } satisfies Partial<OllamaProviderError>);
   });
 
   it("preserves caller cancellation instead of treating it as a provider failure", async () => {

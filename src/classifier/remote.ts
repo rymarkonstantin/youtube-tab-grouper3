@@ -3,7 +3,11 @@ import type { RemoteClassifierConfig } from "./config";
 import { MalformedClassificationResponseError } from "./errors";
 import { buildBatchPrompt, buildClassifierSystemPrompt } from "./prompt";
 import type { ClassifierInput, ProviderHealth, SemanticClassifierProvider } from "./providers";
-import { createClassificationResponseSchema, parseClassificationResponse } from "./response";
+import {
+  createClassificationResponseSchema,
+  parseClassificationResponse,
+  parsePartialClassificationResponse,
+} from "./response";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -66,9 +70,14 @@ export class RemoteClassifierProvider implements SemanticClassifierProvider {
           messages: [
             {
               role: "system",
-              content: buildClassifierSystemPrompt(enabledRules, input.fallbackRuleId),
+              content: buildClassifierSystemPrompt(enabledRules, input.fallbackRuleId, {
+                turboMode: input.turboMode === true,
+              }),
             },
-            { role: "user", content: buildBatchPrompt(input.items) },
+            {
+              role: "user",
+              content: buildBatchPrompt(input.items, { turboMode: input.turboMode === true }),
+            },
           ],
           response_format: {
             type: "json_schema",
@@ -82,7 +91,14 @@ export class RemoteClassifierProvider implements SemanticClassifierProvider {
       },
       signal,
     );
-    return parseClassificationResponse(content, itemIds, new Set(enabledRuleIds));
+    const enabledRuleIdSet = new Set(enabledRuleIds);
+    try {
+      return parseClassificationResponse(content, itemIds, enabledRuleIdSet);
+    } catch (error) {
+      if (error instanceof MalformedClassificationResponseError)
+        return parsePartialClassificationResponse(content, itemIds, enabledRuleIdSet);
+      throw error;
+    }
   }
 
   private async request(init: RequestInit, signal: AbortSignal): Promise<string> {

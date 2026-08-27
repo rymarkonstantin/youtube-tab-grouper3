@@ -1,10 +1,14 @@
 import type { ClassificationItem, ClassificationResult, GroupRule } from "../types";
 import { canFallbackToRemote, selectProviderChain, type ClassifierConfig } from "./config";
+import { runClassificationBatches, type ClassificationBatchProgress } from "./batching";
+import { OllamaProviderError } from "./ollama";
+import { RemoteProviderError } from "./remote";
 
 export interface ClassifierInput {
   items: ClassificationItem[];
   rules: GroupRule[];
   fallbackRuleId: string;
+  turboMode?: boolean;
 }
 
 export interface ProviderHealth {
@@ -27,6 +31,7 @@ export interface ProviderChainClassifierOptions {
   onHealth?(providerId: ClassifierProviderId, health: ProviderHealth): void;
   onSelected?(providerId: ClassifierProviderId): void;
   onFallback?(from: ClassifierProviderId, to: ClassifierProviderId, reason: unknown): void;
+  onBatchProgress?(progress: ClassificationBatchProgress): void;
 }
 
 /** Selects a configured provider once per run, with one local-to-remote retry in Automatic mode. */
@@ -38,6 +43,9 @@ export class ProviderChainClassifier {
   private readonly onHealth: NonNullable<ProviderChainClassifierOptions["onHealth"]>;
   private readonly onSelected: NonNullable<ProviderChainClassifierOptions["onSelected"]>;
   private readonly onFallback: NonNullable<ProviderChainClassifierOptions["onFallback"]>;
+  private readonly onBatchProgress: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>;
+  private readonly concurrency: number;
+  private readonly turboMode: boolean;
   private providerIndex = 0;
 
   activeProviderId: ClassifierProviderId | undefined;
@@ -50,6 +58,9 @@ export class ProviderChainClassifier {
     this.onHealth = options.onHealth ?? (() => undefined);
     this.onSelected = options.onSelected ?? (() => undefined);
     this.onFallback = options.onFallback ?? (() => undefined);
+    this.onBatchProgress = options.onBatchProgress ?? (() => undefined);
+    this.concurrency = options.config.concurrency;
+    this.turboMode = options.config.turboMode;
   }
 
   async classify(
@@ -60,13 +71,34 @@ export class ProviderChainClassifier {
     throwIfAborted(this.signal);
     const provider = await this.resolveProvider();
     try {
-      return await provider.classify({ items, rules, fallbackRuleId }, this.signal);
+      return await this.classifyWithProvider(provider, items, rules, fallbackRuleId);
     } catch (error) {
       if (this.signal.aborted) throw abortError(this.signal);
       if (!this.canTryRemote(provider.id)) throw error;
       const next = await this.advanceToRemote(provider.id, error);
-      return next.classify({ items, rules, fallbackRuleId }, this.signal);
+      return this.classifyWithProvider(next, items, rules, fallbackRuleId);
     }
+  }
+
+  private async classifyWithProvider(
+    provider: SemanticClassifierProvider,
+    items: ClassificationItem[],
+    rules: GroupRule[],
+    fallbackRuleId: string,
+  ): Promise<ClassificationResult[]> {
+    const outcome = await runClassificationBatches(items, {
+      maxBatchSize: 4,
+      concurrency: this.concurrency,
+      signal: this.signal,
+      isTimeout: isProviderTimeout,
+      onProgress: this.onBatchProgress,
+      classifyBatch: (batch, signal) =>
+        provider.classify(
+          { items: batch, rules, fallbackRuleId, turboMode: this.turboMode },
+          signal,
+        ),
+    });
+    return outcome.results;
   }
 
   private async resolveProvider(): Promise<SemanticClassifierProvider> {
@@ -113,6 +145,13 @@ export class ProviderChainClassifier {
     this.onFallback(from, to, reason);
     return this.resolveProvider();
   }
+}
+
+function isProviderTimeout(error: unknown): boolean {
+  return (
+    (error instanceof OllamaProviderError && error.code === "timeout") ||
+    (error instanceof RemoteProviderError && error.code === "timeout")
+  );
 }
 
 function throwIfAborted(signal: AbortSignal): void {
