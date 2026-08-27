@@ -20,7 +20,7 @@ function isGroupColor(value: unknown): value is GroupColor {
 function hasControlCharacter(value: string): boolean {
   return [...value].some((character) => {
     const code = character.charCodeAt(0);
-    return code <= 0x1f || code === 0x7f;
+    return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
   });
 }
 
@@ -92,7 +92,7 @@ export function validateRuleConfig(value: unknown): RuleConfigValidation {
       if (
         normalizedName.length < 1 ||
         normalizedName.length > 60 ||
-        hasControlCharacter(normalizedName)
+        hasControlCharacter(name)
       ) {
         addIssue(
           issues,
@@ -117,7 +117,7 @@ export function validateRuleConfig(value: unknown): RuleConfigValidation {
       if (
         normalizedDescription.length < 1 ||
         normalizedDescription.length > 600 ||
-        hasControlCharacter(normalizedDescription)
+        hasControlCharacter(description)
       ) {
         addIssue(
           issues,

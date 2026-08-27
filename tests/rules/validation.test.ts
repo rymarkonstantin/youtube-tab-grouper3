@@ -70,4 +70,14 @@ describe("validateRuleConfig", () => {
     ruleAt(descriptionInput, 0).description = "Software\u0000development";
     expect(validateRuleConfig(descriptionInput).ok).toBe(false);
   });
+
+  it("rejects leading controls and Unicode C1 controls before trimming", () => {
+    const leadingControlInput = createDefaultRuleConfig();
+    ruleAt(leadingControlInput, 0).name = "\nProgramming";
+    expect(validateRuleConfig(leadingControlInput).ok).toBe(false);
+
+    const c1Input = createDefaultRuleConfig();
+    ruleAt(c1Input, 0).description = "Software\u0085development";
+    expect(validateRuleConfig(c1Input).ok).toBe(false);
+  });
 });
