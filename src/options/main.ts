@@ -90,6 +90,10 @@ async function initialize(): Promise<void> {
     if (status)
       status.textContent =
         error instanceof Error ? error.message : "Stored configuration is invalid.";
+    for (const id of ["rules", "add", "save", "clear-cache"]) {
+      const element = document.querySelector<HTMLElement>(`#${id}`);
+      if (element) element.hidden = id === "rules";
+    }
     return;
   }
   document.querySelector<HTMLButtonElement>("#add")?.addEventListener("click", () => {

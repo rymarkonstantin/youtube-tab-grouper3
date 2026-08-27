@@ -5,7 +5,7 @@ import { ChromeTabsAdapter } from "../chrome/tabs";
 import { ChromeBuiltInClassifier, ChromeLanguageModelPort } from "../classifier/chrome-built-in";
 import { ChromeLanguageApi } from "../classifier/language";
 import { ActivationRequiredError, AiUnavailableError } from "../classifier/errors";
-import { loadOrInitializeRuleConfig } from "../rules/storage";
+import { InvalidStoredRuleConfigError, loadOrInitializeRuleConfig } from "../rules/storage";
 import { runGrouping } from "../run/coordinator";
 import type { RunSummary } from "../run/types";
 import type { PanelState } from "./state";
@@ -84,6 +84,8 @@ async function startRun(allowDownloads: boolean): Promise<void> {
       setBadge("!", "#777777");
     } else if (error instanceof AiUnavailableError)
       render({ kind: "unavailable", message: error.message });
+    else if (error instanceof InvalidStoredRuleConfigError)
+      render({ kind: "configuration-error", message: error.message });
     else if (controller.signal.aborted) render({ kind: "cancelled" });
     else
       render({
