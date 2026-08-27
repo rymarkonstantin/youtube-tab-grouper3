@@ -108,6 +108,7 @@ async function initialize(): Promise<void> {
       render();
       if (status) status.textContent = "Defaults restored and cache cleared.";
     } catch (error) {
+      renderValidationIssues([]);
       if (status)
         status.textContent = error instanceof Error ? error.message : "Unable to restore defaults.";
     }
@@ -146,6 +147,7 @@ async function initialize(): Promise<void> {
       await new ClassificationCacheRepository(chrome.storage.local).clear();
       if (status) status.textContent = "Classification cache cleared.";
     } catch (error) {
+      renderValidationIssues([]);
       if (status)
         status.textContent = error instanceof Error ? error.message : "Unable to clear cache.";
     }

@@ -136,6 +136,7 @@ export function initializeSidePanel(): void {
     const pending = currentRun?.pending;
     if (!pending || !navigator.userActivation.isActive) return;
     const controller = new AbortController();
+    currentRun = { controller, pending };
     void pending
       .prepare({
         signal: controller.signal,
