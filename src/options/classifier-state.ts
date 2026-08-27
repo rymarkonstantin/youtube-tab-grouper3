@@ -28,7 +28,10 @@ export function classifierSettingsView(
     return {
       remoteCanBeUsed: false,
       remoteNeedsPermission: false,
-      remoteMessage: "Remote fallback is disabled. No metadata will be sent remotely.",
+      remoteMessage:
+        config.mode === "remote-only"
+          ? "Enable remote classification before using Remote only."
+          : "Remote fallback is disabled. No metadata will be sent remotely.",
     };
   }
   if (!hasRemoteCredentials(config)) {

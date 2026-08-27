@@ -31,6 +31,17 @@ describe("classifier settings view", () => {
     });
   });
 
+  it("explains that remote-only mode needs an enabled remote provider", () => {
+    const config = createDefaultClassifierConfig();
+    config.mode = "remote-only";
+
+    expect(classifierSettingsView(config, false)).toMatchObject({
+      remoteCanBeUsed: false,
+      remoteNeedsPermission: false,
+      remoteMessage: "Enable remote classification before using Remote only.",
+    });
+  });
+
   it("reports missing remote credentials without exposing entered values", () => {
     const config = createDefaultClassifierConfig();
     config.remote = {
