@@ -61,7 +61,16 @@ export class ClassificationCacheRepository implements ClassificationCacheReposit
 
   async put(entries: ClassificationCacheEntry[], validRuleIds: Set<string>): Promise<void> {
     const current = await this.load();
-    const accepted = entries.filter((entry) => isEntry(entry) && validRuleIds.has(entry.ruleId));
+    const acceptedByKey = new Map<string, ClassificationCacheEntry>();
+    for (const entry of entries) {
+      if (isEntry(entry) && validRuleIds.has(entry.ruleId)) {
+        acceptedByKey.set(
+          `${entry.videoId}\u0000${entry.metadataFingerprint}\u0000${entry.rulesFingerprint}`,
+          entry,
+        );
+      }
+    }
+    const accepted = [...acceptedByKey.values()];
     const keys = new Set(
       accepted.map(
         (entry) =>

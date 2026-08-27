@@ -24,7 +24,7 @@ export function parseYouTubeVideoUrl(value: string): VideoIdentity | null {
   let pageType: VideoPageType = "watch";
   if (host === "youtu.be") {
     videoId = parts[0];
-  } else if (parts[0] === "watch") {
+  } else if (parts.length === 1 && parts[0] === "watch") {
     videoId = url.searchParams.get("v") ?? undefined;
   } else if (parts[0] === "shorts" || parts[0] === "live") {
     pageType = parts[0] === "shorts" ? "short" : "live";

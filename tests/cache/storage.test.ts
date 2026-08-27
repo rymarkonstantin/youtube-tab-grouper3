@@ -29,3 +29,18 @@ it("promotes hits, rejects deleted rules, caps entries, and stores no raw metada
   ).toBeNull();
   expect(JSON.stringify(storage.setCalls)).not.toContain("title");
 });
+
+it("deduplicates incoming keys with the last entry winning", async () => {
+  const storage = new MemoryStorage();
+  const cache = new ClassificationCacheRepository(storage);
+  await cache.put(
+    [
+      { videoId: "a", metadataFingerprint: "m", rulesFingerprint: "r", ruleId: "history" },
+      { videoId: "a", metadataFingerprint: "m", rulesFingerprint: "r", ruleId: "fishing" },
+    ],
+    new Set(["history", "fishing"]),
+  );
+  expect(await cache.load()).toEqual([
+    { videoId: "a", metadataFingerprint: "m", rulesFingerprint: "r", ruleId: "fishing" },
+  ]);
+});

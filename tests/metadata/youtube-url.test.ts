@@ -26,6 +26,7 @@ describe("parseYouTubeVideoUrl", () => {
     "https://youtube.com.evil.test/watch?v=abc_123-XYZ",
     "http://www.youtube.com/watch?v=abc_123-XYZ",
     "https://www.youtube.com/watch",
+    "https://www.youtube.com/watch/unsupported?v=abc_123-XYZ",
     "chrome://extensions/",
   ])("rejects %s", (url) => {
     expect(parseYouTubeVideoUrl(url)).toBeNull();
