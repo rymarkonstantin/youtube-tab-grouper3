@@ -205,11 +205,13 @@ export async function normalizeClassifierInputs(
             );
         }
         if (metadata.hashtags) {
-          metadata.hashtags = await Promise.all(
-            metadata.hashtags.map((tag) =>
-              translateValue(tag, language, api, options, translatorSessions, true),
-            ),
-          );
+          const translatedHashtags: string[] = [];
+          for (const tag of metadata.hashtags) {
+            translatedHashtags.push(
+              await translateValue(tag, language, api, options, translatorSessions, true),
+            );
+          }
+          metadata.hashtags = translatedHashtags;
         }
         inputLanguages.add("en");
         normalizedItems.push({ itemId: item.itemId, metadata });

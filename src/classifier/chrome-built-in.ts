@@ -254,9 +254,12 @@ export class ChromeBuiltInClassifier {
                 new Set(enabledRules.map(({ id }) => id)),
               ),
             );
-          } catch {
+          } catch (error: unknown) {
             if (this.options.signal.aborted) {
               throw new DOMException("The classification was aborted.", "AbortError");
+            }
+            if (errorIsTerminal(error)) {
+              throw error;
             }
             // A repeated item failure remains unclassified for this run.
           } finally {
