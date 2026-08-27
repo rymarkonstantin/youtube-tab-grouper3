@@ -59,6 +59,19 @@ function setBadge(text: string, color: string): void {
   void chrome.action.setBadgeBackgroundColor({ color });
 }
 
+function showDownloadProgress(capability: string, loaded: number): void {
+  const fraction = Math.max(0, Math.min(1, loaded));
+  const status = document.querySelector<HTMLElement>("#status");
+  if (status)
+    status.textContent = `Grouping YouTube tabs: Downloading ${capability} (${Math.round(fraction * 100)}%)`;
+  const progress = document.querySelector<HTMLProgressElement>("#progress");
+  if (progress) {
+    progress.hidden = false;
+    progress.max = 1;
+    progress.value = fraction;
+  }
+}
+
 async function startRun(allowDownloads: boolean): Promise<void> {
   if (currentRun) return;
   const controller = new AbortController();
@@ -74,11 +87,8 @@ async function startRun(allowDownloads: boolean): Promise<void> {
       {
         allowDownloads,
         signal: controller.signal,
-        onDownloadProgress: (download) => {
-          const status = document.querySelector<HTMLElement>("#status");
-          if (status)
-            status.textContent = `Grouping YouTube tabs: Downloading ${download.capability} (${download.loaded})`;
-        },
+        onDownloadProgress: (download) =>
+          showDownloadProgress(download.capability, download.loaded),
         onPhase: (phase) =>
           render({ kind: "running", progress: { phase, completed: 0, total: 1 } }),
       },
@@ -140,11 +150,7 @@ export function initializeSidePanel(): void {
     void pending
       .prepare({
         signal: controller.signal,
-        onDownloadProgress: (loaded) => {
-          const status = document.querySelector<HTMLElement>("#status");
-          if (status)
-            status.textContent = `AI preparation: Downloading ${pending.capability} (${loaded})`;
-        },
+        onDownloadProgress: (loaded) => showDownloadProgress(pending.capability, loaded),
       })
       .then(
         () => {

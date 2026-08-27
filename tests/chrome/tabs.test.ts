@@ -48,3 +48,22 @@ it("limits concurrent metadata injections for large tab sets", async () => {
   expect(maximum).toBeLessThanOrEqual(8);
   expect(chromeApi.scripting.executeScript).toHaveBeenCalledTimes(20);
 });
+
+it("falls back to the tab title when page metadata injection is rejected", async () => {
+  const tab = chromeTab({
+    id: 2,
+    windowId: 7,
+    url: "https://youtube.com/watch?v=a",
+    title: "Fallback title",
+  });
+  const chromeApi = fakeChromeTabs({
+    activeTab: chromeTab({ id: 99, windowId: 7, url: "https://github.com/" }),
+    window: { id: 7, type: "normal", incognito: false },
+    tabs: [tab],
+  });
+  chromeApi.scripting.executeScript.mockRejectedValue(new Error("Cannot access contents"));
+  const adapter = new ChromeTabsAdapter(chromeApi as unknown as ChromeTabsApi);
+  const [result] = await adapter.collectMetadata(await adapter.queryWindowTabs(7));
+  expect(result?.ok).toBe(true);
+  if (result?.ok) expect(result.metadata.title).toBe("Fallback title");
+});
