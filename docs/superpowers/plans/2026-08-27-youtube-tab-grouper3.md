@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Bundle integration:** Implement the six bundles below on their exact `bundle/...` branches. Each bundle gets one pull request into `main`; do not begin the next bundle until the preceding pull request is merged and local `main` is updated.
+
 **Goal:** Build a standalone Chrome Manifest V3 extension that uses Chrome's on-device AI APIs to semantically classify and group YouTube video tabs in the current normal window.
 
 **Architecture:** A side-panel document coordinates tab discovery, metadata extraction, local language normalization, constrained Prompt API classification, cache resolution, deterministic planning, and native group application. A minimal service worker only configures action-click side-panel behavior, while an options page edits the shared validated rule configuration.
@@ -26,6 +28,164 @@
 - Persist rules and the bounded 500-entry cache only in `chrome.storage.local`.
 - Use the Chrome-provided generic action icon for v1; a custom raster identity is outside the accepted functional scope.
 - Every task follows red-green-refactor discipline and ends with a focused commit.
+- Implementation is delivered in six dependency-ordered bundles, with only one bundle branch and pull request active at a time.
+- After the one-time remote-baseline preflight below, never commit or push implementation directly to `main`.
+- Every bundle must pass its complete validation and review gate before merge. Review corrections stay on that bundle's branch.
+- Use a regular pull-request merge commit, not squash or rebase merge, so the bundle boundary and focused task commits remain visible.
+
+## Sequential Bundle and Pull Request Workflow
+
+The task order is also the integration order. A later bundle may depend only on code already merged into `main`, never on an unmerged bundle branch.
+
+| Bundle | Branch | Tasks | Pull request title |
+|---|---|---|---|
+| 1 — Foundation | `bundle/01-foundation` | Tasks 1–3 | `Bundle 1: Extension foundation` |
+| 2 — Metadata and cache | `bundle/02-metadata-cache` | Tasks 4–5 | `Bundle 2: YouTube metadata and cache` |
+| 3 — Semantic AI | `bundle/03-semantic-ai` | Tasks 6–8 | `Bundle 3: On-device semantic classifier` |
+| 4 — Grouping runtime | `bundle/04-grouping-runtime` | Tasks 9–11 | `Bundle 4: Deterministic grouping runtime` |
+| 5 — User interface | `bundle/05-user-interface` | Tasks 12–13 | `Bundle 5: Extension user interfaces` |
+| 6 — Documentation and validation | `bundle/06-docs-validation` | Task 14 | `Bundle 6: Documentation and release validation` |
+
+### One-time remote baseline preflight
+
+At planning time, local `main` has no live `origin/main` tracking ref. Resolve that once before opening Bundle 1:
+
+```powershell
+git fetch origin
+git ls-remote --exit-code --heads origin main
+```
+
+Exit code `0` with a commit ID means the branch exists; exit code `2` with no matching ref means it does not. Treat authentication, authorization, transport, or any other failure as a blocker rather than assuming the branch is absent.
+
+If `origin/main` exists, attach local `main`, fast-forward it where possible, and inspect the remaining relationship:
+
+```powershell
+git switch main
+git branch --set-upstream-to=origin/main main
+git pull --ff-only origin main
+git rev-list --left-right --count origin/main...main
+```
+
+The final command must report `0 0` before Bundle 1 opens. If it reports local-only commits, first verify with `git diff --name-status origin/main...main` that they are only the approved planning baseline, publish them as `docs/approved-planning-baseline`, and merge that baseline through its own regular-merge pull request:
+
+```powershell
+git push origin main:refs/heads/docs/approved-planning-baseline
+gh pr create --base main --head docs/approved-planning-baseline --title "Docs: Publish approved implementation baseline" --body "Publishes the approved design and sequential implementation plan before Bundle 1."
+git fetch origin
+git pull --ff-only origin main
+git rev-list --left-right --count origin/main...main
+```
+
+Wait for that documentation pull request to merge before the second fetch. If its branch already exists, its diff is not documentation-only, GitHub CLI is unavailable, or either side has unique history, stop and reconcile explicitly; do not open Bundle 1 from unequal refs.
+
+If the remote query reports that `main` does not exist, publish the current approved documentation baseline:
+
+```powershell
+git switch main
+git push -u origin main
+```
+
+Creating an absent remote `main` from the approved local documentation baseline is the sole allowed direct push to `main`; all implementation changes go through pull requests. If the remote contains unexpected or divergent history, stop and reconcile it explicitly. Never force-push or reset away either history.
+
+### Opening a bundle
+
+For Bundle 1, after the remote preflight:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/01-foundation
+```
+
+Task 1 establishes the package toolchain, so Bundle 1 has no pre-change `npm` validation. Open each later branch only after the preceding pull request has been merged:
+
+```powershell
+# Bundle 2
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/02-metadata-cache
+npm ci
+npm run validate
+
+# Bundle 3
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/03-semantic-ai
+npm ci
+npm run validate
+
+# Bundle 4
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/04-grouping-runtime
+npm ci
+npm run validate
+
+# Bundle 5
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/05-user-interface
+npm ci
+npm run validate
+
+# Bundle 6
+git switch main
+git pull --ff-only origin main
+git switch -c bundle/06-docs-validation
+npm ci
+npm run validate
+```
+
+Run only the block for the bundle being opened. If the branch already exists, the baseline validation fails, or local `main` is not a clean fast-forward of `origin/main`, stop and investigate instead of deleting, resetting, or stacking work. A dedicated branch is mandatory; an isolated worktree is optional and, when used, must be created through `superpowers:using-git-worktrees`.
+
+### Pull request gate for every bundle
+
+After the last task in a bundle, but before pushing it, run:
+
+```powershell
+git fetch origin
+git merge-base --is-ancestor origin/main HEAD
+npm run validate
+git diff --check origin/main...HEAD
+git status --short --branch
+```
+
+The ancestry command must succeed, the worktree must be clean, the complete validation suite must pass, and the branch diff must contain only that bundle's scope. If `origin/main` advanced, merge the freshly fetched `origin/main` into the current bundle branch, resolve any conflict there, and rerun the full gate. Then invoke `superpowers:requesting-code-review` with `origin/main` as the base and `HEAD` as the review target. Fix all Critical and Important findings on the same branch and rerun the full gate.
+
+Push and open exactly one pull request using the branch and title from the table. The six exact publication commands are:
+
+```powershell
+git push -u origin bundle/01-foundation
+gh pr create --base main --head bundle/01-foundation --title "Bundle 1: Extension foundation" --body "Implements Tasks 1-3. Validation: npm run validate."
+
+git push -u origin bundle/02-metadata-cache
+gh pr create --base main --head bundle/02-metadata-cache --title "Bundle 2: YouTube metadata and cache" --body "Implements Tasks 4-5. Validation: npm run validate."
+
+git push -u origin bundle/03-semantic-ai
+gh pr create --base main --head bundle/03-semantic-ai --title "Bundle 3: On-device semantic classifier" --body "Implements Tasks 6-8. Validation: npm run validate."
+
+git push -u origin bundle/04-grouping-runtime
+gh pr create --base main --head bundle/04-grouping-runtime --title "Bundle 4: Deterministic grouping runtime" --body "Implements Tasks 9-11. Validation: npm run validate."
+
+git push -u origin bundle/05-user-interface
+gh pr create --base main --head bundle/05-user-interface --title "Bundle 5: Extension user interfaces" --body "Implements Tasks 12-13. Validation: npm run validate."
+
+git push -u origin bundle/06-docs-validation
+gh pr create --base main --head bundle/06-docs-validation --title "Bundle 6: Documentation and release validation" --body "Implements Task 14. Validation: npm run validate."
+```
+
+Run only the two commands for the current bundle. Review the resulting GitHub diff, wait for required checks and approvals, and merge with a regular merge commit. If GitHub CLI is unavailable, perform the same PR, checks, review, and merge steps in GitHub's web UI.
+
+After GitHub reports the current pull request merged:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+npm ci
+npm run validate
+```
+
+Confirm that `main` contains the merge commit and passes validation before deleting the merged local bundle branch. Only then may the next bundle be opened. If a check or review fails, correct the current bundle; do not begin the next one. For Bundle 6, this post-merge validation is the final implementation verification.
 
 ## File Responsibility Map
 
@@ -75,6 +235,8 @@
 ---
 
 ### Task 1: Buildable Manifest V3 shell
+
+**Bundle:** 1 — `bundle/01-foundation`
 
 **Files:**
 - Create: `.gitignore`
@@ -278,6 +440,8 @@ git commit -m "build: add manifest v3 extension shell"
 ---
 
 ### Task 2: Core types, default taxonomy, and validation
+
+**Bundle:** 1 — `bundle/01-foundation`
 
 **Files:**
 - Create: `src/types.ts`
@@ -513,6 +677,8 @@ git commit -m "feat: add semantic rule model"
 
 ### Task 3: Persistent rule storage without silent overwrite
 
+**Bundle:** 1 — `bundle/01-foundation`
+
 **Files:**
 - Create: `src/storage.ts`
 - Create: `src/rules/storage.ts`
@@ -626,9 +792,13 @@ git add src/storage.ts src/rules/storage.ts tests/helpers/memory-storage.ts test
 git commit -m "feat: persist validated semantic rules"
 ```
 
+**Bundle boundary:** Stop here. Execute the Bundle 1 pull request gate, merge it into `main`, update local `main`, and pass post-merge validation before starting Task 4.
+
 ---
 
 ### Task 4: YouTube video recognition and metadata normalization
+
+**Bundle:** 2 — `bundle/02-metadata-cache`
 
 **Files:**
 - Create: `src/metadata/youtube-url.ts`
@@ -820,6 +990,8 @@ git commit -m "feat: recognize youtube videos and metadata"
 
 ### Task 5: Fingerprinted bounded classification cache
 
+**Bundle:** 2 — `bundle/02-metadata-cache`
+
 **Files:**
 - Create: `src/cache/fingerprint.ts`
 - Create: `src/cache/storage.ts`
@@ -1006,9 +1178,13 @@ git add src/cache tests/cache
 git commit -m "feat: add bounded classification cache"
 ```
 
+**Bundle boundary:** Stop here. Execute the Bundle 2 pull request gate, merge it into `main`, update local `main`, and pass post-merge validation before starting Task 6.
+
 ---
 
 ### Task 6: Local language detection and translation
+
+**Bundle:** 3 — `bundle/03-semantic-ai`
 
 **Files:**
 - Create: `src/classifier/errors.ts`
@@ -1258,6 +1434,8 @@ git commit -m "feat: normalize classifier languages locally"
 
 ### Task 7: Topic-first prompt and constrained response contract
 
+**Bundle:** 3 — `bundle/03-semantic-ai`
+
 **Files:**
 - Create: `src/classifier/classifier.ts`
 - Create: `src/classifier/prompt.ts`
@@ -1401,6 +1579,8 @@ git commit -m "feat: define semantic classifier contract"
 ---
 
 ### Task 8: Chrome Prompt API classifier with adaptive batches
+
+**Bundle:** 3 — `bundle/03-semantic-ai`
 
 **Files:**
 - Create: `src/classifier/chrome-built-in.ts`
@@ -1705,9 +1885,13 @@ git add src/classifier/chrome-built-in.ts src/classifier/errors.ts tests/helpers
 git commit -m "feat: classify videos with chrome built-in ai"
 ```
 
+**Bundle boundary:** Stop here. Execute the Bundle 3 pull request gate, merge it into `main`, update local `main`, and pass post-merge validation before starting Task 9.
+
 ---
 
 ### Task 9: Managed-group ownership and deterministic planning
+
+**Bundle:** 4 — `bundle/04-grouping-runtime`
 
 **Files:**
 - Create: `src/grouping/types.ts`
@@ -1941,6 +2125,8 @@ git commit -m "feat: plan deterministic managed tab groups"
 ---
 
 ### Task 10: Chrome adapters, revalidation, and group application
+
+**Bundle:** 4 — `bundle/04-grouping-runtime`
 
 **Files:**
 - Create: `src/chrome/tabs.ts`
@@ -2192,6 +2378,8 @@ git commit -m "feat: apply safe native chrome groups"
 
 ### Task 11: End-to-end run coordinator
 
+**Bundle:** 4 — `bundle/04-grouping-runtime`
+
 **Files:**
 - Create: `src/run/types.ts`
 - Create: `src/run/coordinator.ts`
@@ -2418,9 +2606,13 @@ git add src/run tests/helpers/run-fixtures.ts tests/run
 git commit -m "feat: coordinate current-window grouping runs"
 ```
 
+**Bundle boundary:** Stop here. Execute the Bundle 4 pull request gate, merge it into `main`, update local `main`, and pass post-merge validation before starting Task 12.
+
 ---
 
 ### Task 12: Side-panel workflow, cancellation, and badges
+
+**Bundle:** 5 — `bundle/05-user-interface`
 
 **Files:**
 - Modify: `static/sidepanel.html`
@@ -2555,6 +2747,8 @@ git commit -m "feat: add explicit side-panel grouping workflow"
 
 ### Task 13: Accessible persistent category editor
 
+**Bundle:** 5 — `bundle/05-user-interface`
+
 **Files:**
 - Modify: `static/options.html`
 - Modify: `src/options/main.ts`
@@ -2657,9 +2851,13 @@ git add static/options.html src/options tests/options
 git commit -m "feat: add semantic category editor"
 ```
 
+**Bundle boundary:** Stop here. Execute the Bundle 5 pull request gate, merge it into `main`, update local `main`, and pass post-merge validation before starting Task 14.
+
 ---
 
 ### Task 14: README, full validation, and Chrome acceptance matrix
+
+**Bundle:** 6 — `bundle/06-docs-validation`
 
 **Files:**
 - Create: `README.md`
@@ -2829,3 +3027,5 @@ git log --oneline --decorate -15
 ```
 
 Expected: validation passes, the worktree is clean, and the history contains focused commits for the shell, rules, storage, metadata, cache, language handling, classifier contract, built-in classifier, planner, Chrome application, coordinator, side panel, options, and documentation.
+
+**Bundle boundary:** Execute the Bundle 6 pull request gate and merge it into `main`. The implementation is complete only after the merged `main` passes the post-merge `npm run validate` command and the final Chrome acceptance result is recorded in the handoff.
