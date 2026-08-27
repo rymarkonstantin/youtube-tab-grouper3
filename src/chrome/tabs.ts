@@ -18,6 +18,25 @@ export interface TabsPort {
   collectMetadata(tabs: TabSnapshot[]): Promise<TabMetadataResult[]>;
   getTab(tabId: number): Promise<TabSnapshot>;
 }
+const METADATA_CONCURRENCY = 8;
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  worker: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  async function consume(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      results[index] = await worker(values[index] as T);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(METADATA_CONCURRENCY, values.length) }, () => consume()),
+  );
+  return results;
+}
 export class ChromeTabsAdapter implements TabsPort {
   constructor(private readonly api: ChromeTabsApi) {}
   async captureCurrentNormalWindow(): Promise<number> {
@@ -47,28 +66,26 @@ export class ChromeTabsAdapter implements TabsPort {
     const eligible = tabs.filter(
       (tab) => !tab.pinned && !tab.discarded && parseYouTubeVideoUrl(tab.url ?? ""),
     );
-    const results = await Promise.all(
-      eligible.map(async (tab): Promise<TabMetadataResult> => {
-        const identity = parseYouTubeVideoUrl(tab.url ?? "");
-        if (!identity) return { ok: false, tab, error: "Unsupported YouTube page." };
-        try {
-          const [frame] = await this.api.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: extractYouTubePageMetadata,
-          });
-          const metadata = normalizeVideoMetadata(identity, frame?.result, tab.title);
-          return metadata
-            ? { ok: true, tab, metadata }
-            : { ok: false, tab, error: "No usable video title." };
-        } catch (error) {
-          return {
-            ok: false,
-            tab,
-            error: error instanceof Error ? error.message : "Metadata unavailable.",
-          };
-        }
-      }),
-    );
+    const results = await mapWithConcurrency(eligible, async (tab): Promise<TabMetadataResult> => {
+      const identity = parseYouTubeVideoUrl(tab.url ?? "");
+      if (!identity) return { ok: false, tab, error: "Unsupported YouTube page." };
+      try {
+        const [frame] = await this.api.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: extractYouTubePageMetadata,
+        });
+        const metadata = normalizeVideoMetadata(identity, frame?.result, tab.title);
+        return metadata
+          ? { ok: true, tab, metadata }
+          : { ok: false, tab, error: "No usable video title." };
+      } catch (error) {
+        return {
+          ok: false,
+          tab,
+          error: error instanceof Error ? error.message : "Metadata unavailable.",
+        };
+      }
+    });
     return results;
   }
   async getTab(tabId: number): Promise<TabSnapshot> {
