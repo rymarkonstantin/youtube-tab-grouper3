@@ -50,6 +50,10 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
   private readonly model: string;
 
   async health(signal: AbortSignal): Promise<ProviderHealth> {
+    console.debug("[youtube-tab-grouper3] ollama:health:start", {
+      endpointOrigin: new URL(this.endpoint).origin,
+      model: this.model,
+    });
     try {
       const response = await this.request(
         "/api/show",
@@ -61,10 +65,20 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
         signal,
       );
       await validateShowResponse(response);
+      console.info("[youtube-tab-grouper3] ollama:health:available", { status: response.status });
       return { available: true };
     } catch (error) {
       if (signal.aborted) throw abortError(signal);
-      if (error instanceof OllamaProviderError) return { available: false, reason: error.code };
+      if (error instanceof OllamaProviderError) {
+        console.warn("[youtube-tab-grouper3] ollama:health:unavailable", {
+          reason: error.code,
+        });
+        return { available: false, reason: error.code };
+      }
+      console.warn("[youtube-tab-grouper3] ollama:health:unavailable", {
+        reason: "unexpected-error",
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
       return { available: false, reason: "request-failed" };
     }
   }
