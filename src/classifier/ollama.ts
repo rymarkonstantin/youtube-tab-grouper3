@@ -49,7 +49,15 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
 
   async health(signal: AbortSignal): Promise<ProviderHealth> {
     try {
-      await this.request("/api/tags", { method: "GET" }, signal);
+      await this.request(
+        "/api/show",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: this.model }),
+        },
+        signal,
+      );
       return { available: true };
     } catch (error) {
       if (signal.aborted) throw abortError(signal);
@@ -83,7 +91,12 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
       },
       signal,
     );
-    const payload = (await response.json()) as unknown;
+    let payload: unknown;
+    try {
+      payload = (await response.json()) as unknown;
+    } catch {
+      throw new MalformedClassificationResponseError("Ollama returned invalid JSON.");
+    }
     const content =
       typeof payload === "object" &&
       payload !== null &&

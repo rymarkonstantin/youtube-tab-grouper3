@@ -77,6 +77,33 @@ describe("OllamaClassifierProvider", () => {
     });
   });
 
+  it("checks the configured model during health reporting", async () => {
+    const fetcher = vi.fn((url: RequestInfo | URL) =>
+      Promise.resolve(
+        String(url).endsWith("/api/show")
+          ? jsonResponse({ error: "model not found" }, 404)
+          : jsonResponse({ models: [] }),
+      ),
+    );
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "missing-model",
+      fetcher,
+    });
+
+    await expect(provider.health(new AbortController().signal)).resolves.toEqual({
+      available: false,
+      reason: "model-missing",
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:11434/api/show",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "missing-model" }),
+      }),
+    );
+  });
+
   it("sends a semantic structured-output request to the configured model and endpoint", async () => {
     const fetcher = vi.fn().mockResolvedValue(validResponse());
     const provider = new OllamaClassifierProvider({
@@ -144,6 +171,18 @@ describe("OllamaClassifierProvider", () => {
       endpoint: "http://127.0.0.1:11434",
       model: "qwen2.5:3b-instruct",
       fetcher: vi.fn().mockResolvedValue(jsonResponse({ message: { content: "not-json" } })),
+    });
+
+    await expect(provider.classify(input, new AbortController().signal)).rejects.toBeInstanceOf(
+      MalformedClassificationResponseError,
+    );
+  });
+
+  it("maps malformed successful HTTP response bodies to a classification response error", async () => {
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher: vi.fn().mockResolvedValue(new Response("not JSON", { status: 200 })),
     });
 
     await expect(provider.classify(input, new AbortController().signal)).rejects.toBeInstanceOf(
