@@ -34,7 +34,8 @@ Only metadata from explicitly processed YouTube tabs is inspected. Title, descri
 - `sidePanel`: provide the explicit grouping workflow UI.
 - `storage`: persist rules and the local 500-entry cache.
 - `tabGroups`: create, reuse, and color managed native groups.
-- Host access: `https://*.youtube.com/*` and `https://youtu.be/*` only.
+- `https://*.youtube.com/*`: read supported YouTube video-page metadata.
+- `https://youtu.be/*`: support YouTube's short-link form when it resolves to a video.
 
 The extension intentionally does not request `tabs` or `activeTab`; it uses the permitted tab APIs and scripting only for the current window and approved YouTube hosts.
 
@@ -70,7 +71,9 @@ Open YouTube videos in one normal Chrome window, click the extension action, and
 
 ## Configuration
 
-Open **Edit categories** to rename, describe, recolor, reorder, enable, disable, add, or delete rules. The fallback rule cannot be deleted or disabled. **Restore defaults** resets categories and clears the cache; **Clear classification cache** removes cached decisions without changing rules. Managed groups use the reserved `YT · ` prefix. Clean matching groups in the current window are reused; unrelated user-created groups and their non-YouTube members are preserved. A group with unexpected membership is left untouched rather than riskily repurposed.
+Open **Edit categories** to rename, describe, recolor, reorder, enable, disable, add, or delete rules. The fallback rule cannot be deleted or disabled. **Restore defaults** resets categories and clears the cache; **Clear classification cache** removes cached decisions without changing rules. Managed groups use the reserved `YT · ` prefix. Clean matching groups in the current window are reused. Eligible YouTube tabs may be moved out of an existing user-created group, but that group’s non-YouTube members and group properties are preserved; a contaminated matching group is left untouched rather than riskily repurposed.
+
+The cache is limited to 500 entries and stores only video ID, metadata fingerprint, rules fingerprint, and selected rule ID. It does not store raw titles, descriptions, channels, URLs, translations, reasons, or timestamps.
 
 ## Page and edge-case behavior
 
