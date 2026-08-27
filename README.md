@@ -123,7 +123,7 @@ Use **Run again** after changing tabs or settings. Repeating a run with unchange
 
 Open **Edit categories** to rename, describe, recolor, reorder, enable, disable, add, or delete rules. The fallback rule cannot be deleted or disabled. **Restore defaults** resets categories and clears the cache; **Clear classification cache** removes cached decisions without changing rules.
 
-The same page controls the classifier mode, local Ollama endpoint/model, opt-in remote endpoint/model/API key, exact-origin remote permission, and the diagnostics toggle. Saving classifier settings clears the cache so a changed model or provider cannot reuse an old decision.
+The same page controls the classifier mode, local Ollama endpoint/model, opt-in remote endpoint/model/API key, exact-origin remote permission, and the diagnostics toggle. Saving semantic/provider settings clears the cache so a changed model or provider cannot reuse an old decision; changing concurrency alone preserves cached decisions.
 
 ### Performance controls
 
