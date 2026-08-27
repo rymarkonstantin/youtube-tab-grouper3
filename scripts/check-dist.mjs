@@ -10,7 +10,15 @@ const manifest = JSON.parse(await readFile(path.resolve(distPath, "manifest.json
 assert.equal(manifest.manifest_version, 3);
 assert.equal(manifest.minimum_chrome_version, "138");
 assert.deepEqual(manifest.permissions, ["scripting", "sidePanel", "storage", "tabGroups"]);
-assert.deepEqual(manifest.host_permissions, ["https://*.youtube.com/*", "https://youtu.be/*"]);
+assert.deepEqual(manifest.host_permissions, [
+  "https://*.youtube.com/*",
+  "https://youtu.be/*",
+  "http://127.0.0.1/*",
+  "http://localhost/*",
+  "https://127.0.0.1/*",
+  "https://localhost/*",
+]);
+assert.deepEqual(manifest.optional_host_permissions, ["https://*/*"]);
 assert.equal(manifest.incognito, "not_allowed");
 assert.equal(manifest.background.service_worker, "background.js");
 assert.equal(manifest.side_panel.default_path, "sidepanel.html");
