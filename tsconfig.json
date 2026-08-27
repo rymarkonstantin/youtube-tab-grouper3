@@ -8,7 +8,7 @@
     "exactOptionalPropertyTypes": true,
     "useUnknownInCatchVariables": true,
     "lib": ["ES2022", "DOM", "ESNext.Disposable"],
-    "types": ["chrome", "node", "vitest/globals"],
+    "types": ["chrome", "dom-chromium-ai", "node", "vitest/globals"],
     "noEmit": true
   },
   "include": ["src", "tests", "vitest.config.ts"]
