@@ -87,6 +87,7 @@ describe("RemoteClassifierProvider", () => {
         reason: "The video is about TypeScript web development.",
       },
     ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
 
     const [url, init] = fetcher.mock.calls[0] ?? [];
     expect(url).toBe("https://api.example.test/v1/chat/completions");
@@ -125,6 +126,82 @@ describe("RemoteClassifierProvider", () => {
       "https://api.example.test/v1/chat/completions",
       expect.anything(),
     );
+  });
+
+  it("returns valid items from an incomplete batch without adapter retries", async () => {
+    const twoItemInput: ClassifierInput = {
+      ...input,
+      items: [
+        ...input.items,
+        {
+          itemId: "video-2",
+          metadata: {
+            videoId: "second-video-id",
+            pageType: "watch" as const,
+            title: "Second video",
+          },
+        },
+      ],
+    };
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                results: [{ itemId: "video-1", ruleId: "programming" }],
+              }),
+            },
+          },
+        ],
+      }),
+    );
+    const provider = createProvider(fetcher);
+
+    await expect(provider.classify(twoItemInput, new AbortController().signal)).resolves.toEqual([
+      { itemId: "video-1", ruleId: "programming" },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses compact Turbo prompts for its transport request", async () => {
+    const fetcher = vi.fn().mockResolvedValue(validResponse());
+    const provider = createProvider(fetcher);
+    const turboInput = {
+      ...input,
+      turboMode: true,
+      items: [
+        {
+          itemId: "video-1",
+          metadata: {
+            videoId: "private-video-id",
+            pageType: "watch" as const,
+            title: "t".repeat(201),
+            description: "d".repeat(601),
+            channelName: "c".repeat(101),
+            hashtags: ["h".repeat(61), "two", "three", "four", "five", "six", "seven"],
+            playlistTitle: "p".repeat(121),
+          },
+        },
+      ],
+    };
+
+    await provider.classify(turboInput, new AbortController().signal);
+
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ content: string }>;
+    };
+    const sent = JSON.parse(body.messages[1]?.content ?? "{}") as {
+      items: Array<Record<string, unknown>>;
+    };
+    expect(body.messages[0]?.content).toContain("reason is optional");
+    expect(sent.items[0]).toMatchObject({
+      title: "t".repeat(200),
+      description: "d".repeat(600),
+      channelName: "c".repeat(100),
+      hashtags: ["h".repeat(60), "two", "three", "four", "five", "six"],
+      playlistTitle: "p".repeat(120),
+    });
   });
 
   it("maps an unsuccessful remote response to a typed provider error", async () => {

@@ -8,6 +8,7 @@ export interface ClassifierInput {
   items: ClassificationItem[];
   rules: GroupRule[];
   fallbackRuleId: string;
+  turboMode?: boolean;
 }
 
 export interface ProviderHealth {
@@ -44,6 +45,7 @@ export class ProviderChainClassifier {
   private readonly onFallback: NonNullable<ProviderChainClassifierOptions["onFallback"]>;
   private readonly onBatchProgress: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>;
   private readonly concurrency: number;
+  private readonly turboMode: boolean;
   private providerIndex = 0;
 
   activeProviderId: ClassifierProviderId | undefined;
@@ -58,6 +60,7 @@ export class ProviderChainClassifier {
     this.onFallback = options.onFallback ?? (() => undefined);
     this.onBatchProgress = options.onBatchProgress ?? (() => undefined);
     this.concurrency = options.config.concurrency;
+    this.turboMode = options.config.turboMode;
   }
 
   async classify(
@@ -90,7 +93,10 @@ export class ProviderChainClassifier {
       isTimeout: isProviderTimeout,
       onProgress: this.onBatchProgress,
       classifyBatch: (batch, signal) =>
-        provider.classify({ items: batch, rules, fallbackRuleId }, signal),
+        provider.classify(
+          { items: batch, rules, fallbackRuleId, turboMode: this.turboMode },
+          signal,
+        ),
     });
     return outcome.results;
   }
