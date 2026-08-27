@@ -3,7 +3,6 @@ import type { AiAvailability } from "../../src/classifier/language";
 import type {
   LanguageModelAvailabilityOptions,
   LanguageModelCreateOptions,
-  LanguageModelParams,
   LanguageModelPort,
   LanguageModelSessionPort,
 } from "../../src/classifier/chrome-built-in";
@@ -11,14 +10,12 @@ import { ChromeBuiltInClassifier } from "../../src/classifier/chrome-built-in";
 
 export interface FakeModelOptions {
   availability?: AiAvailability;
-  params?: Pick<LanguageModelParams, "maxTemperature" | "maxTopK">;
   contextUsage?: number;
   contextWindow?: number;
   measuredUsage?: number[];
   responses?: Array<string | Error>;
 }
 export interface FakeModelPort extends LanguageModelPort {
-  paramsCalls: number;
   availabilityCalls: LanguageModelAvailabilityOptions[];
   createCalls: LanguageModelCreateOptions[];
   sessions: Array<LanguageModelSessionPort & { measuredItemCounts: number[]; destroyed: boolean }>;
@@ -59,19 +56,9 @@ export function createFakeModelPort(options: FakeModelOptions = {}): FakeModelPo
   let responseIndex = 0;
   let measurementIndex = 0;
   const port: FakeModelPort = {
-    paramsCalls: 0,
     availabilityCalls: [],
     createCalls: [],
     sessions: [],
-    params: async () => {
-      port.paramsCalls++;
-      return {
-        defaultTopK: 1,
-        maxTopK: options.params?.maxTopK ?? 128,
-        defaultTemperature: 1,
-        maxTemperature: options.params?.maxTemperature ?? 2,
-      };
-    },
     availability: async (value) => {
       port.availabilityCalls.push(value);
       return options.availability ?? "available";

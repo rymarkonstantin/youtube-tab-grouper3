@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ActivationRequiredError,
-  AiUnavailableError,
-  UnsupportedModelParametersError,
-} from "../../src/classifier/errors";
+import { ActivationRequiredError, AiUnavailableError } from "../../src/classifier/errors";
 import {
   createClassifier,
   item,
@@ -44,33 +40,20 @@ describe("ChromeBuiltInClassifier", () => {
     ).rejects.toBeInstanceOf(AiUnavailableError);
   });
 
-  it("creates sessions with temperature zero and topK one", async () => {
+  it("uses current Prompt API options without deprecated sampling parameters", async () => {
     const model = createFakeModelPort({ responses: [validProgrammingResponse] });
     await createClassifier({ model, allowDownloads: true }).classify(
       [programmingItem],
       rules,
       "uncategorized",
     );
-    expect(model.createCalls[0]).toMatchObject({ temperature: 0, topK: 1 });
+    expect(model.createCalls[0]).not.toHaveProperty("temperature");
+    expect(model.createCalls[0]).not.toHaveProperty("topK");
     const created = model.createCalls[0];
     expect(model.availabilityCalls[0]).toEqual({
       expectedInputs: created?.expectedInputs,
       expectedOutputs: created?.expectedOutputs,
-      temperature: created?.temperature,
-      topK: created?.topK,
     });
-  });
-
-  it("rejects a model that cannot honor deterministic parameters", async () => {
-    const model = createFakeModelPort({ params: { maxTemperature: -1, maxTopK: 0 } });
-    await expect(
-      createClassifier({ model, allowDownloads: true }).classify(
-        [programmingItem],
-        rules,
-        "uncategorized",
-      ),
-    ).rejects.toBeInstanceOf(UnsupportedModelParametersError);
-    expect(model.createCalls).toHaveLength(0);
   });
 
   it("reduces a batch until measured context fits", async () => {
