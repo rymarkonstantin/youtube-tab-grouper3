@@ -46,5 +46,5 @@ export interface ClassificationItem {
 export interface ClassificationResult {
   itemId: string;
   ruleId: string;
-  reason: string;
+  reason?: string;
 }
