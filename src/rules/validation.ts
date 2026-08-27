@@ -89,8 +89,16 @@ export function validateRuleConfig(value: unknown): RuleConfigValidation {
       addIssue(issues, `${path}.name`, "Rule name must be a string.");
     } else {
       normalizedName = name.trim();
-      if (normalizedName.length < 1 || normalizedName.length > 60) {
-        addIssue(issues, `${path}.name`, "Rule name must be 1–60 characters after trimming.");
+      if (
+        normalizedName.length < 1 ||
+        normalizedName.length > 60 ||
+        hasControlCharacter(normalizedName)
+      ) {
+        addIssue(
+          issues,
+          `${path}.name`,
+          "Rule name must be 1–60 characters after trimming and contain no controls.",
+        );
       }
       const foldedName = normalizedName.toLowerCase();
       if (names.has(foldedName)) {
@@ -106,11 +114,15 @@ export function validateRuleConfig(value: unknown): RuleConfigValidation {
       addIssue(issues, `${path}.description`, "Rule description must be a string.");
     } else {
       normalizedDescription = description.trim();
-      if (normalizedDescription.length < 1 || normalizedDescription.length > 600) {
+      if (
+        normalizedDescription.length < 1 ||
+        normalizedDescription.length > 600 ||
+        hasControlCharacter(normalizedDescription)
+      ) {
         addIssue(
           issues,
           `${path}.description`,
-          "Rule description must be 1–600 characters after trimming.",
+          "Rule description must be 1–600 characters after trimming and contain no controls.",
         );
       }
     }

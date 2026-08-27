@@ -60,4 +60,14 @@ describe("validateRuleConfig", () => {
       expect(validateRuleConfig(input).ok).toBe(false);
     }
   });
+
+  it("rejects control characters in names and descriptions", () => {
+    const nameInput = createDefaultRuleConfig();
+    ruleAt(nameInput, 0).name = "Programming\nnotes";
+    expect(validateRuleConfig(nameInput).ok).toBe(false);
+
+    const descriptionInput = createDefaultRuleConfig();
+    ruleAt(descriptionInput, 0).description = "Software\u0000development";
+    expect(validateRuleConfig(descriptionInput).ok).toBe(false);
+  });
 });
