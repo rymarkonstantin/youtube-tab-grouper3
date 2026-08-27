@@ -1,4 +1,5 @@
 import type { ClassifierProviderId, ProviderHealth } from "./classifier/providers";
+import type { ClassificationBatchProgress } from "./classifier/batching";
 import type { RunSummary } from "./run/types";
 
 type FailureArea = "metadata" | "classification" | "grouping";
@@ -49,6 +50,10 @@ export class RunDiagnostics {
   private phaseStartedAt: number | undefined;
   private classificationBatches = 0;
   private classificationItems = 0;
+  private configuredConcurrency: number | undefined;
+  private turboMode: boolean | undefined;
+  private classificationItemCount = 0;
+  private batchProgress: ClassificationBatchProgress | undefined;
   private selectedProviderId: ClassifierProviderId | undefined;
   private summary: RunSummary | undefined;
 
@@ -89,6 +94,24 @@ export class RunDiagnostics {
     this.classificationItems += itemCount;
   }
 
+  /** Records aggregate classifier configuration only; this API never accepts video metadata. */
+  configureClassification(value: {
+    turboMode: boolean;
+    concurrency: number;
+    itemCount: number;
+  }): void {
+    if (!this.enabled) return;
+    this.turboMode = value.turboMode;
+    this.configuredConcurrency = value.concurrency;
+    this.classificationItemCount = value.itemCount;
+  }
+
+  /** Records scheduler counters only; reasons and classification content are deliberately excluded. */
+  recordBatchProgress(progress: ClassificationBatchProgress): void {
+    if (!this.enabled) return;
+    this.batchProgress = { ...progress };
+  }
+
   recordFailure(area: FailureArea, reason: unknown): void {
     if (!this.enabled) return;
     const key = `${area}:${redactDiagnosticReason(reason)}`;
@@ -113,7 +136,18 @@ export class RunDiagnostics {
     for (const fallback of this.fallbacks)
       lines.push(`${fallback.from} -> ${fallback.to} (${fallback.reason})`);
     if (this.selectedProviderId) lines.push(`selected provider: ${this.selectedProviderId}`);
-    if (this.classificationBatches > 0)
+    if (this.turboMode !== undefined && this.configuredConcurrency !== undefined)
+      lines.push(
+        `classifier settings: turbo: ${this.turboMode ? "on" : "off"}; concurrency: ${this.configuredConcurrency}`,
+      );
+    if (this.batchProgress) {
+      lines.push(
+        `classification batches: ${this.batchProgress.completedBatchCount}/${this.batchProgress.startedBatchCount}; items: ${this.batchProgress.completedItemCount}/${this.classificationItemCount}`,
+      );
+      lines.push(
+        `splits: ${this.batchProgress.splitCount}; recovered: ${this.batchProgress.recoveredItemCount}; failed items: ${this.batchProgress.failedItemCount}`,
+      );
+    } else if (this.classificationBatches > 0)
       lines.push(
         `classification batches: ${this.classificationBatches}; items: ${this.classificationItems}`,
       );

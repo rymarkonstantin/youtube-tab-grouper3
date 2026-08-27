@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClassificationCacheEntry, ClassificationCacheKey } from "../../src/cache/storage";
 import { createDefaultClassifierConfig } from "../../src/classifier/config";
+import type { ClassificationBatchProgress } from "../../src/classifier/batching";
 import { runGrouping } from "../../src/run/coordinator";
 import {
   fakeRunDependencies,
@@ -120,5 +121,52 @@ describe("runGrouping", () => {
     await runGrouping(second, runOptions());
 
     expect(second.classifier.classify).toHaveBeenCalledOnce();
+  });
+
+  it("reports aggregate multi-batch classification progress", async () => {
+    const deps = fakeRunDependencies({
+      tabs: [videoTab(10, "video-a"), videoTab(20, "video-b")],
+      metadata: [
+        videoMetadata("video-a", "History video"),
+        videoMetadata("video-b", "Photography video"),
+      ],
+    });
+    let notify: ((progress: ClassificationBatchProgress) => void) | undefined;
+    const providerAware = deps.classifier as typeof deps.classifier & {
+      setBatchProgressListener(listener: (progress: ClassificationBatchProgress) => void): void;
+    };
+    providerAware.setBatchProgressListener = (listener) => {
+      notify = listener;
+    };
+    providerAware.classify.mockImplementation(async (items: Array<{ itemId: string }>) => {
+      notify?.({
+        startedBatchCount: 1,
+        completedBatchCount: 1,
+        completedItemCount: 2,
+        splitCount: 0,
+        recoveredItemCount: 0,
+        failedItemCount: 0,
+      } as ClassificationBatchProgress);
+      return items.map(({ itemId }) => ({ itemId, ruleId: "uncategorized" }));
+    });
+    const progress: Array<Record<string, unknown>> = [];
+
+    await runGrouping(deps, {
+      ...runOptions(),
+      onProgress: (value) => progress.push(value as unknown as Record<string, unknown>),
+    });
+
+    expect(progress).toContainEqual(
+      expect.objectContaining({
+        phase: "classifying",
+        completed: 2,
+        total: 2,
+        classification: expect.objectContaining({
+          completedBatchCount: 1,
+          completedItemCount: 2,
+          configuredConcurrency: 1,
+        }),
+      }),
+    );
   });
 });

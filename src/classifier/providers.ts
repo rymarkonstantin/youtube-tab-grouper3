@@ -43,7 +43,7 @@ export class ProviderChainClassifier {
   private readonly onHealth: NonNullable<ProviderChainClassifierOptions["onHealth"]>;
   private readonly onSelected: NonNullable<ProviderChainClassifierOptions["onSelected"]>;
   private readonly onFallback: NonNullable<ProviderChainClassifierOptions["onFallback"]>;
-  private readonly onBatchProgress: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>;
+  private onBatchProgress: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>;
   private readonly concurrency: number;
   private readonly turboMode: boolean;
   private providerIndex = 0;
@@ -78,6 +78,12 @@ export class ProviderChainClassifier {
       const next = await this.advanceToRemote(provider.id, error);
       return this.classifyWithProvider(next, items, rules, fallbackRuleId);
     }
+  }
+
+  setBatchProgressListener(
+    listener: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>,
+  ): void {
+    this.onBatchProgress = listener;
   }
 
   private async classifyWithProvider(

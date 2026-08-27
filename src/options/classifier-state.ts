@@ -6,6 +6,27 @@ export interface ClassifierSettingsView {
   remoteMessage: string;
 }
 
+export interface ClassifierSettingsCacheImpact {
+  clearClassificationCache: boolean;
+}
+
+/** Determines whether a settings save changes semantic classifier input or provider identity. */
+export function classifierSettingsCacheImpact(
+  before: ClassifierConfig,
+  after: ClassifierConfig,
+): ClassifierSettingsCacheImpact {
+  return {
+    clearClassificationCache:
+      before.mode !== after.mode ||
+      before.turboMode !== after.turboMode ||
+      before.local.endpoint !== after.local.endpoint ||
+      before.local.model !== after.local.model ||
+      before.remote.enabled !== after.remote.enabled ||
+      before.remote.endpoint !== after.remote.endpoint ||
+      before.remote.model !== after.remote.model,
+  };
+}
+
 function hasRemoteCredentials(config: ClassifierConfig): boolean {
   return Boolean(
     config.remote.endpoint.trim() && config.remote.model.trim() && config.remote.apiKey.trim(),

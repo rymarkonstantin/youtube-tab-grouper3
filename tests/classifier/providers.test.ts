@@ -225,6 +225,7 @@ describe("ProviderChainClassifier", () => {
 
     expect(progress).toHaveBeenLastCalledWith({
       completedBatchCount: 1,
+      completedItemCount: 1,
       failedItemCount: 0,
       recoveredItemCount: 0,
       splitCount: 0,

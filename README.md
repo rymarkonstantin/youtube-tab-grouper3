@@ -9,8 +9,12 @@ classifier settings are included in `0.2.0`. `MAJOR` is for breaking configurati
 changes, removed behavior, a higher minimum Chrome version, or material permission/privacy
 changes. Documentation-only, test-only, and development-only changes do not require a version
 bump unless they are packaged for a Chrome release. Every uploaded Chrome package must use a
-higher manifest version. `package.json` is the release source of truth, and validation fails if
-the manifest version diverges.
+higher manifest version. `package.json` is the release source of truth. Validation fails if the
+manifest version diverges.
+
+The current development version remains `0.2.0`. These performance and quality fixes become
+`0.2.1` only when packaged for distribution; packaging is the point at which the manifest must be
+bumped to a higher version.
 
 ## What it does
 
@@ -119,7 +123,24 @@ Use **Run again** after changing tabs or settings. Repeating a run with unchange
 
 Open **Edit categories** to rename, describe, recolor, reorder, enable, disable, add, or delete rules. The fallback rule cannot be deleted or disabled. **Restore defaults** resets categories and clears the cache; **Clear classification cache** removes cached decisions without changing rules.
 
-The same page controls the classifier mode, local Ollama endpoint/model, opt-in remote endpoint/model/API key, exact-origin remote permission, and the diagnostics toggle. Saving classifier settings clears the cache so a changed model or provider cannot reuse an old decision.
+The same page controls the classifier mode, local Ollama endpoint/model, opt-in remote endpoint/model/API key, exact-origin remote permission, and the diagnostics toggle. Saving semantic/provider settings clears the cache so a changed model or provider cannot reuse an old decision; changing concurrency alone preserves cached decisions.
+
+### Performance controls
+
+**Turbo mode is off by default.** When enabled, prompts use bounded transport fields (title 200
+characters, description 600, channel 100, six hashtags of 60 characters, and playlist title 120)
+and request an optional short reason. Turbo changes prompt size only; it does not change the
+taxonomy or enable parallel processing.
+
+**Concurrent batches** accepts an integer from **1 through 8** and defaults to 1 (sequential
+processing). The provider chain schedules bounded batches of **at most four items** and preserves
+the original item order. The same concurrency limit applies to local and remote providers.
+
+If a batch times out, the chain uses **recursive timeout splitting** (`4 → 2 → 1`) and isolates a
+single-item failure so successful items can still be grouped. Incomplete responses use
+**partial-response recovery**: valid items are retained and missing item IDs are retried on the
+same provider. A provider-level failure may still trigger the configured one-time remote fallback.
+Cancellation stops the run without mutating affected tabs.
 
 ## Cache migration
 
@@ -127,11 +148,17 @@ The cache is limited to 500 entries and contains only video ID, metadata fingerp
 
 The hybrid release fingerprints a cached decision with the active provider id, endpoint origin, model, and classifier schema version. Therefore cache entries from the former Chrome-built-in classifier do not match; changing provider/model configuration also causes a fresh semantic decision. This is intentional and does not alter category rules.
 
+Changing concurrency alone does not invalidate a semantic cache decision. Changing Turbo mode,
+provider, endpoint, or model does invalidate matching entries because it can change the classifier
+input or output behavior.
+
 ## Diagnostics
 
 Diagnostics are disabled by default. When enabled in settings, **Copy diagnostics** appears after a run. It copies an in-memory, local-only, redacted report with aggregate phase durations, provider health/selection/fallback, batch counts, failure categories, and run totals.
 
-The report contains no title, description, channel, URL, prompt, response, token count, API key, or raw exception payload. It is not uploaded and is cleared when the side panel closes.
+The report never includes titles, descriptions, channels, URLs, prompts, responses, token counts,
+API keys, reasons, or raw exception payloads. It is not uploaded and is cleared when the side panel
+closes. Console traces are likewise aggregate and sanitized.
 
 ## Page and edge-case behavior
 
@@ -160,6 +187,16 @@ There is no bundled offline model and no automated browser-level test for native
 
 ## Manual acceptance checklist
 
-In a temporary Chrome profile, verify local-only grouping with `qwen2.5:3b-instruct`; unavailable Ollama causes no mutation; Automatic mode falls back once only after a configured remote permission grant; Remote only rejects missing configuration safely; and copied diagnostics are redacted. Also verify unseen English topics (`.NET Aspire`, perch crankbaits, Canon EOS R6), Russian/Belarusian/Japanese metadata, Shorts/live/watch-playlist URLs, non-video pages untouched, discarded/loading/navigation races, pinned tabs, duplicate tabs, preserved user groups, clean managed-group reuse, Uncategorized fallback, rapid repeated invocation, deterministic second runs, and category edit/reorder/disable/restore/cache clear.
+Run the manual matrix with **2, 13, and 180+ eligible tabs** using a CPU-local Ollama model. For
+each size, verify small batches complete, progress remains understandable, cached classifications
+are skipped, timed-out batches split, failed tabs remain unchanged, and unrelated tabs/groups are
+untouched. Also verify local-only grouping with `qwen2.5:3b-instruct`; unavailable Ollama causes no
+mutation; Automatic mode falls back once only after a configured remote permission grant; Remote
+only rejects missing configuration safely; and copied diagnostics are redacted. Verify unseen
+English topics (`.NET Aspire`, perch crankbaits, Canon EOS R6), Russian/Belarusian/Japanese
+metadata, Shorts/live/watch-playlist URLs, non-video pages untouched, discarded/loading/navigation
+races, pinned tabs, duplicate tabs, preserved user groups, clean managed-group reuse, Uncategorized
+fallback, rapid repeated invocation, deterministic second runs, and category edit/reorder/disable/
+restore/cache clear.
 
 Record manual Chrome results in the release handoff. If Chrome cannot be launched in the development environment, perform this checklist locally before release.

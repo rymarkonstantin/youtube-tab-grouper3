@@ -7,6 +7,7 @@ export interface ClassificationBatchItem {
 export interface ClassificationBatchProgress {
   startedBatchCount: number;
   completedBatchCount: number;
+  completedItemCount: number;
   splitCount: number;
   recoveredItemCount: number;
   failedItemCount: number;
@@ -42,6 +43,7 @@ export async function runClassificationBatches<T extends ClassificationBatchItem
   const progress: ClassificationBatchProgress = {
     startedBatchCount: 0,
     completedBatchCount: 0,
+    completedItemCount: 0,
     splitCount: 0,
     recoveredItemCount: 0,
     failedItemCount: 0,
@@ -60,6 +62,7 @@ export async function runClassificationBatches<T extends ClassificationBatchItem
       throwIfAborted(options.signal);
       progress.completedBatchCount++;
       const valid = validResults(response, batch);
+      progress.completedItemCount += valid.length;
       if (recovered) progress.recoveredItemCount += valid.length;
       notify();
 

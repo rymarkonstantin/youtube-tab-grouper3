@@ -70,6 +70,22 @@
           <input id="diagnostics-enabled" type="checkbox" />
           Enable local, redacted diagnostic logging
         </label>
+        <label>
+          <input id="turbo-mode" type="checkbox" />
+          Turbo mode
+        </label>
+        <p>
+          Turbo mode is off by default. It reduces prompt size and asks for a short optional
+          reason; it does not change categories.
+        </p>
+        <label>
+          Concurrent batches
+          <input id="concurrency" type="number" min="1" max="8" step="1" inputmode="numeric" />
+        </label>
+        <p>
+          Use 1–8 concurrent batches for local or remote classification. This changes scheduling
+          only and does not alter semantic cache fingerprints.
+        </p>
         <div>
           <button id="save-classifier" type="button">Save classifier settings</button>
           <button id="restore-classifier" type="button">Restore classifier defaults</button>

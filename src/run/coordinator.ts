@@ -60,10 +60,29 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   const work = await createClassificationWorkItems(uncached, rulesFingerprint);
   if (work.items.length > 0) {
     phase(options, "classifying", work.items.length);
+    options.diagnostics?.configureClassification({
+      turboMode: deps.classifierConfig?.turboMode ?? false,
+      concurrency: deps.classifierConfig?.concurrency ?? 1,
+      itemCount: work.items.length,
+    });
+    deps.classifier.setBatchProgressListener?.((batchProgress) => {
+      options.diagnostics?.recordBatchProgress(batchProgress);
+      options.onProgress({
+        phase: "classifying",
+        completed: Math.min(
+          work.items.length,
+          batchProgress.completedItemCount + batchProgress.failedItemCount,
+        ),
+        total: work.items.length,
+        classification: {
+          ...batchProgress,
+          configuredConcurrency: deps.classifierConfig?.concurrency ?? 1,
+        },
+      });
+    });
     let results: ClassificationResult[];
     let classificationFailed = false;
     try {
-      options.diagnostics?.recordBatch(work.items.length);
       results = await deps.classifier.classify(
         work.items.map(({ item }) => item),
         rules.rules,

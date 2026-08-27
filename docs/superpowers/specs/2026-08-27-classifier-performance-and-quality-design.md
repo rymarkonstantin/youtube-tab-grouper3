@@ -1,7 +1,7 @@
 # YouTube Tab Grouper 3 — Classifier Performance and Quality Addendum
 
 **Date:** 2026-08-27
-**Status:** Proposed; implementation follows in the main-thread SDD workflow
+**Status:** Implemented; merged through Bundles 7–9
 **Parent design:** `docs/superpowers/specs/2026-08-27-hybrid-classifier-design.md`
 
 ## Context

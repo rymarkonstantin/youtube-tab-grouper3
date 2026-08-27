@@ -12,6 +12,21 @@ export type ProviderStatus =
   | { kind: "ollama-unavailable"; model: string }
   | { kind: "remote-unavailable" };
 
+export interface ClassificationProgressViewInput {
+  configuredConcurrency: number;
+  startedBatchCount: number;
+  completedBatchCount: number;
+  completedItemCount: number;
+  splitCount: number;
+  recoveredItemCount: number;
+  failedItemCount: number;
+}
+
+/** Formats scheduler counters only; no content from a tab or provider response is accepted. */
+export function classificationProgressView(value: ClassificationProgressViewInput): string {
+  return `Batches ${value.completedBatchCount}/${value.startedBatchCount}; items ${value.completedItemCount}; concurrency ${value.configuredConcurrency}; splits ${value.splitCount}; recovered ${value.recoveredItemCount}; failed items ${value.failedItemCount}.`;
+}
+
 /** Produces status text that does not expose endpoints, credentials, or raw provider errors. */
 export function providerStatusView(status: ProviderStatus): ProviderStatusView {
   switch (status.kind) {

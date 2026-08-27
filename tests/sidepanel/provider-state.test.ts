@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultClassifierConfig } from "../../src/classifier/config";
 import { classifierSettingsView } from "../../src/options/classifier-state";
-import { diagnosticsCopyView, providerStatusView } from "../../src/sidepanel/provider-state";
+import {
+  classificationProgressView,
+  diagnosticsCopyView,
+  providerStatusView,
+} from "../../src/sidepanel/provider-state";
 
 describe("classifier settings view", () => {
   it("keeps remote fallback unavailable in local-only mode", () => {
@@ -86,5 +90,19 @@ describe("provider side-panel state", () => {
     expect(diagnosticsCopyView(false, true)).toEqual({ visible: false, enabled: false });
     expect(diagnosticsCopyView(true, false)).toEqual({ visible: true, enabled: false });
     expect(diagnosticsCopyView(true, true)).toEqual({ visible: true, enabled: true });
+  });
+
+  it("renders only aggregate batch progress", () => {
+    expect(
+      classificationProgressView({
+        configuredConcurrency: 3,
+        startedBatchCount: 4,
+        completedBatchCount: 3,
+        completedItemCount: 10,
+        splitCount: 1,
+        recoveredItemCount: 2,
+        failedItemCount: 1,
+      }),
+    ).toEqual("Batches 3/4; items 10; concurrency 3; splits 1; recovered 2; failed items 1.");
   });
 });
