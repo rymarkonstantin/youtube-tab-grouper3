@@ -19,12 +19,20 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   phase(options, "metadata", 1);
   const tabs = await deps.tabs.queryWindowTabs(windowId);
   const groups = await deps.groups.queryGroups(windowId);
-  const metadataResults = await deps.tabs.collectMetadata(tabs);
+  const metadataResults = await deps.tabs.collectMetadata(tabs, {
+    signal: options.signal,
+    onProgress: (metadata) =>
+      options.onProgress({
+        phase: "metadata",
+        completed: metadata.completed,
+        total: metadata.total,
+      }),
+  });
   const successfulMetadata = metadataResults.filter(
     (result): result is Extract<typeof result, { ok: true }> => result.ok,
   );
   for (const result of metadataResults)
-    options.diagnostics?.recordMetadataResult(result.ok, result.ok ? undefined : result.error);
+    options.diagnostics?.recordMetadataResult(result.ok, result.ok ? undefined : result.reason);
   let failed = metadataResults.filter((result) => !result.ok).length;
   const skipped = tabs.length - metadataResults.length;
   phase(options, "cache", successfulMetadata.length);
