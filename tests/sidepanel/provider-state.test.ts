@@ -102,7 +102,10 @@ describe("provider side-panel state", () => {
         splitCount: 1,
         recoveredItemCount: 2,
         failedItemCount: 1,
+        currentBatchSize: 6,
+        averageItemDurationMs: 320,
+        etaMs: 2560,
       }),
-    ).toEqual("Batches 3/4; items 10; concurrency 3; splits 1; recovered 2; failed items 1.");
+    ).toContain("batch size 6; average item 320ms; ETA 00:02.560");
   });
 });

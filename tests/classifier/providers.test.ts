@@ -6,6 +6,11 @@ import {
   type SemanticClassifierProvider,
 } from "../../src/classifier/providers";
 import type { ClassificationResult } from "../../src/types";
+import type {
+  PreparedClassificationRun,
+  PreparedRunContext,
+  ProviderCapabilities,
+} from "../../src/classifier/session";
 
 function provider(
   id: "ollama" | "remote",
@@ -16,6 +21,11 @@ function provider(
 ): SemanticClassifierProvider & {
   health: ReturnType<typeof vi.fn>;
   classify: ReturnType<typeof vi.fn>;
+  capabilities?: ProviderCapabilities;
+  prepare?: (
+    context: PreparedRunContext,
+    signal: AbortSignal,
+  ) => Promise<PreparedClassificationRun>;
 } {
   return {
     id,
@@ -231,5 +241,126 @@ describe("ProviderChainClassifier", () => {
       splitCount: 0,
       startedBatchCount: 1,
     });
+  });
+
+  it("prepares the local run once and disposes it after adaptive classification", async () => {
+    const dispose = vi.fn();
+    const classifyBatch = vi.fn(async (batch: typeof input.items) =>
+      batch.map(({ itemId }) => ({ itemId, ruleId: "uncategorized" })),
+    );
+    const local: SemanticClassifierProvider = {
+      id: "ollama",
+      capabilities: { maxConcurrency: 1, maxBatchSize: 12, supportsPreparedRuns: true },
+      health: vi.fn(async () => ({ available: true })),
+      classify: vi.fn(),
+      prepare: vi.fn(
+        async () =>
+          ({
+            rules: [],
+            fallbackRuleId: "uncategorized",
+            model: "model",
+            schemaVersion: "classification-v1",
+            maxConcurrency: 1,
+            maxBatchSize: 12,
+            classifyBatch,
+            dispose,
+          }) satisfies PreparedClassificationRun,
+      ),
+    };
+    const classifier = new ProviderChainClassifier({
+      config: createDefaultClassifierConfig(),
+      providers: { ollama: local },
+      signal: new AbortController().signal,
+    });
+
+    await classifier.classify(input.items, input.rules, input.fallbackRuleId);
+
+    expect(local.prepare).toHaveBeenCalledOnce();
+    expect(classifyBatch).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(local.classify).not.toHaveBeenCalled();
+  });
+
+  it("falls back remotely when adaptive local recovery fails every item", async () => {
+    const config = createDefaultClassifierConfig();
+    config.remote = {
+      enabled: true,
+      endpoint: "https://classifier.example",
+      model: "model",
+      apiKey: "key",
+    };
+    const local = provider("ollama");
+    local.capabilities = {
+      maxConcurrency: 1,
+      maxBatchSize: 12,
+      supportsPreparedRuns: true,
+    };
+    local.prepare = vi.fn(
+      async () =>
+        ({
+          rules: [],
+          fallbackRuleId: "uncategorized",
+          model: "model",
+          schemaVersion: "classification-v1",
+          maxConcurrency: 1,
+          maxBatchSize: 12,
+          classifyBatch: vi.fn(async () => {
+            throw new Error("local failed");
+          }),
+          dispose: vi.fn(),
+        }) satisfies PreparedClassificationRun,
+    );
+    const remote = provider("remote");
+    const fallback = vi.fn();
+    const classifier = new ProviderChainClassifier({
+      config,
+      providers: { ollama: local, remote },
+      signal: new AbortController().signal,
+      onFallback: fallback,
+    });
+
+    await classifier.classify(input.items, input.rules, input.fallbackRuleId);
+
+    expect(remote.classify).toHaveBeenCalledOnce();
+    expect(fallback).toHaveBeenCalledOnce();
+  });
+
+  it("keeps partial adaptive local results without remote fallback", async () => {
+    const local = provider("ollama");
+    local.capabilities = { maxConcurrency: 1, maxBatchSize: 12, supportsPreparedRuns: true };
+    const classifyBatch = vi.fn(async (batch: typeof input.items) => {
+      if (batch.length > 1) return [];
+      if (batch[0]?.itemId === "item-1") return [{ itemId: "item-1", ruleId: "uncategorized" }];
+      throw new Error("one item failed");
+    });
+    local.prepare = vi.fn(
+      async () =>
+        ({
+          rules: [],
+          fallbackRuleId: "uncategorized",
+          model: "model",
+          schemaVersion: "classification-v1",
+          maxConcurrency: 1,
+          maxBatchSize: 12,
+          classifyBatch,
+          dispose: vi.fn(),
+        }) satisfies PreparedClassificationRun,
+    );
+    const remote = provider("remote");
+    const config = createDefaultClassifierConfig();
+    config.remote.enabled = true;
+    config.remote.endpoint = "https://classifier.example";
+    config.remote.model = "model";
+    config.remote.apiKey = "key";
+    const classifier = new ProviderChainClassifier({
+      config,
+      providers: { ollama: local, remote },
+      signal: new AbortController().signal,
+    });
+
+    const results = await classifier.classify(input.items, input.rules, input.fallbackRuleId);
+
+    expect(results).toEqual([{ itemId: "item-1", ruleId: "uncategorized" }]);
+    expect(remote.classify).not.toHaveBeenCalled();
   });
 });

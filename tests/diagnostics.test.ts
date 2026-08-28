@@ -82,4 +82,26 @@ describe("RunDiagnostics", () => {
     expect(report).not.toContain("private");
     expect(report).not.toContain("reason");
   });
+
+  it("reports adaptive timing and preparation counters without metadata", () => {
+    const diagnostics = new RunDiagnostics(true);
+    diagnostics.recordPreparation(1250);
+    diagnostics.recordBatchProgress({
+      startedBatchCount: 2,
+      completedBatchCount: 1,
+      completedItemCount: 4,
+      splitCount: 0,
+      recoveredItemCount: 0,
+      failedItemCount: 0,
+      currentBatchSize: 6,
+      averageItemDurationMs: 320,
+      etaMs: 2560,
+    });
+
+    const report = diagnostics.toText();
+    expect(report).toContain("classification preparation: 00:01.250");
+    expect(report).toContain("adaptive batch: size 6; average item: 320ms; eta: 00:02.560");
+    expect(report).not.toContain("title");
+    expect(report).not.toContain("url");
+  });
 });
