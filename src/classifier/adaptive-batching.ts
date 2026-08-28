@@ -20,6 +20,13 @@ export interface AdaptiveBatchOptions<T extends ClassificationBatchItem> {
   onProgress?(progress: AdaptiveBatchProgress): void;
 }
 
+export class AdaptiveProviderFailureError extends Error {
+  constructor(public readonly cause: unknown) {
+    super("Adaptive local classification failed for every item.");
+    this.name = "AdaptiveProviderFailureError";
+  }
+}
+
 const INITIAL_BATCH_SIZE = 4;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 12;
@@ -46,6 +53,7 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
   let totalItemDuration = 0;
   let durationSamples = 0;
   let cursor = 0;
+  let lastProviderError: unknown;
 
   const notify = () => {
     const averageItemDurationMs = durationSamples === 0 ? 0 : totalItemDuration / durationSamples;
@@ -99,6 +107,7 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
       if (batch.length === 1) {
         if (!retry) return execute(batch, true, true);
         progress.failedItemCount++;
+        lastProviderError ??= new Error("Adaptive local classification returned no result.");
         notify();
         return false;
       }
@@ -112,6 +121,7 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
         if (batch.length === 1) {
           if (!retry) return execute(batch, true, true);
           progress.failedItemCount++;
+          lastProviderError = error;
           notify();
           return false;
         }
@@ -125,6 +135,7 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
       if (batch.length === 1) {
         if (!retry) return execute(batch, true, true);
         progress.failedItemCount++;
+        lastProviderError = error;
         notify();
         return false;
       }
@@ -144,6 +155,9 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
     cursor += batch.length;
   }
   notify();
+  if (resultsById.size === 0 && progress.failedItemCount > 0) {
+    throw new AdaptiveProviderFailureError(lastProviderError);
+  }
   return {
     ...progress,
     averageItemDurationMs: durationSamples === 0 ? 0 : totalItemDuration / durationSamples,

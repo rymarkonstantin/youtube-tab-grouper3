@@ -82,35 +82,36 @@ describe("adaptive classification batches", () => {
 
   it("retries an incomplete singleton once, then records it as failed", async () => {
     let calls = 0;
-    const result = await runAdaptiveClassificationBatches(items(1), {
-      signal: new AbortController().signal,
-      maxConcurrency: 1,
-      maxBatchSize: 12,
-      isTimeout: () => false,
-      classifyBatch: async () => {
-        calls++;
-        return [];
-      },
-    });
+    await expect(
+      runAdaptiveClassificationBatches(items(1), {
+        signal: new AbortController().signal,
+        maxConcurrency: 1,
+        maxBatchSize: 12,
+        isTimeout: () => false,
+        classifyBatch: async () => {
+          calls++;
+          return [];
+        },
+      }),
+    ).rejects.toThrow("failed for every item");
     expect(calls).toBe(2);
-    expect(result.failedItemCount).toBe(1);
-    expect(result.results).toEqual([]);
   });
 
   it("retries a recoverable singleton provider error once", async () => {
     let calls = 0;
-    const result = await runAdaptiveClassificationBatches(items(1), {
-      signal: new AbortController().signal,
-      maxConcurrency: 1,
-      maxBatchSize: 12,
-      isTimeout: () => false,
-      classifyBatch: async () => {
-        calls++;
-        throw new Error("transport failed");
-      },
-    });
+    await expect(
+      runAdaptiveClassificationBatches(items(1), {
+        signal: new AbortController().signal,
+        maxConcurrency: 1,
+        maxBatchSize: 12,
+        isTimeout: () => false,
+        classifyBatch: async () => {
+          calls++;
+          throw new Error("transport failed");
+        },
+      }),
+    ).rejects.toThrow("failed for every item");
     expect(calls).toBe(2);
-    expect(result.failedItemCount).toBe(1);
   });
 
   it("splits a multi-item provider error before recovering its items", async () => {
