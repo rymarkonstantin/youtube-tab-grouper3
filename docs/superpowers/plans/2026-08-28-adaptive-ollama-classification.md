@@ -10,6 +10,22 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-28-adaptive-ollama-classification-design.md`
 
+## Sequential bundle delivery
+
+This plan is delivered one bundle at a time from the newly merged `main`. Only one bundle branch
+and pull request may be active at once:
+
+| Bundle | Branch | Tasks |
+|---|---|---|
+| 11 — Prepared provider | `bundle/11-prepared-ollama` | 1–2 |
+| 12 — Adaptive scheduling | `bundle/12-adaptive-scheduling` | 3–4 |
+| 13 — Documentation and validation | `bundle/13-adaptive-release` | 5–6 |
+
+Each bundle requires focused tests, the complete `npm run validate` gate, review against the current
+`origin/main`, one PR into `main`, regular merge, and post-merge validation before the next bundle
+starts. If a later task needs a decision or file from an earlier bundle, it must use the merged
+result rather than an unmerged branch.
+
 ## Global Constraints
 
 - Keep the extension standalone and local-first; no new cloud service or API key.
@@ -69,6 +85,12 @@
 - [ ] Add failing tests for growth after successful batches, reduction after timeout/malformed output, serial local execution, stable ordering, and cancellation.
 - [ ] Run the focused scheduler tests and verify failure.
 - [ ] Implement token/item-bounded adaptive sizing with minimum 1, initial 4, maximum 12, and recursive recovery.
+- [ ] Use the provider-reported capability limit as the effective concurrency; the current Ollama
+  capability is serial (`1`), while remote providers retain the configured bounded worker count.
+- [ ] Make growth/reduction deterministic and expose the effective batch size, completed count,
+  average item duration, and ETA through progress events.
+- [ ] Bound recovery: split to single items, allow one retry per single item, and only then expose a
+  provider-level failure for Automatic-mode remote fallback.
 - [ ] Ensure remote providers continue using bounded configured concurrency.
 - [ ] Run focused tests and the full classifier test suite.
 - [ ] Commit `feat(classifier): adapt local Ollama batch sizes`.
@@ -125,7 +147,11 @@
 - Produce documented benchmark procedure and release readiness report.
 
 - [ ] Add regression tests for 2, 13, and 180+ item scheduling simulations.
+- [ ] Assert cache reuse for unchanged semantic inputs and invalidation only for provider/model/
+  schema/input changes; scheduling controls alone must not invalidate decisions.
 - [ ] Run `npm run validate`, inspect `dist/manifest.json`, and scan for secrets/remote code.
 - [ ] Record manual Chrome/Ollama acceptance steps, measured timings, and known limitations.
-- [ ] Mark the spec implemented only after the bundle’s PR is merged and post-merge validation passes.
+- [ ] Keep the spec status `Approved for planning` through pre-merge commits. After the Bundle 13 PR
+  is merged and post-merge validation passes, update the status in a follow-up documentation commit
+  (or equivalent merge-safe change) and record the merge commit in the report.
 - [ ] Commit `docs(performance): record adaptive Ollama validation`.
