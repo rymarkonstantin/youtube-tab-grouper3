@@ -19,6 +19,7 @@ import { RunDiagnostics } from "../diagnostics";
 import { InvalidStoredRuleConfigError, loadOrInitializeRuleConfig } from "../rules/storage";
 import { runGrouping } from "../run/coordinator";
 import type { RunSummary } from "../run/types";
+import { metadataProgressView } from "./metadata-progress";
 import type { PanelState } from "./state";
 import {
   classificationProgressView,
@@ -98,6 +99,13 @@ function render(state: PanelState): void {
       classificationProgress.textContent = classificationProgressView(
         state.progress.classification,
       );
+  }
+
+  const metadataProgress = document.querySelector<HTMLElement>("#metadata-progress");
+  if (metadataProgress) {
+    metadataProgress.hidden = state.kind !== "running" || state.progress.metadata === undefined;
+    if (state.kind === "running" && state.progress.metadata !== undefined)
+      metadataProgress.textContent = metadataProgressView(state.progress.metadata);
   }
 }
 

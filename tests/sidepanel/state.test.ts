@@ -25,6 +25,32 @@ describe("toPanelViewModel", () => {
     expect(view.message).toContain("1 failed");
     expect(view.runAgainVisible).toBe(true);
   });
+  it("renders metadata collection progress with native progress values", () => {
+    const view = toPanelViewModel({
+      kind: "running",
+      progress: {
+        phase: "metadata",
+        completed: 96,
+        total: 145,
+        metadata: {
+          total: 145,
+          completed: 96,
+          enriched: 72,
+          titleOnly: 20,
+          failed: 4,
+          timedOut: 4,
+          active: 8,
+          elapsedMs: 31_000,
+          etaMs: 16_000,
+          budgetExhausted: false,
+        },
+      },
+    });
+
+    expect(view.heading).toBe("Grouping YouTube tabs");
+    expect(view.message).toBe("Working: metadata. 96/145 complete");
+    expect(view.progress).toEqual({ value: 96, max: 145 });
+  });
   it("distinguishes unavailable classifier and invalid configuration", () => {
     expect(
       toPanelViewModel({ kind: "unavailable", message: "LanguageModel unavailable" }).heading,
