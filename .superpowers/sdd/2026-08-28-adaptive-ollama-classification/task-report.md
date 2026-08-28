@@ -23,8 +23,8 @@ version increment policy is documented in `README.md` and `AGENTS.md`.
 
 - Focused regression test: `npm test -- --run tests/performance/adaptive-validation.test.ts`
   — 1 file, 5 tests passed; Vitest test duration 12 ms (total command duration 282 ms).
-- Full gate: `npm run validate` — run after formatting; results must be recorded from the final
-  command output before the bundle PR is opened.
+- Full gate: `npm run validate` — passed on 2026-08-28: 41 test files / 224 tests, formatting,
+  lint, typecheck, build, and distribution checks all passed.
 - `dist/manifest.json`: inspect after build for Manifest V3, version `0.2.0`, and only approved
   permissions; `npm run check:dist` performs the automated distribution checks.
 - Secret scan: inspect tracked source and generated `dist/` for API keys, bearer tokens, private
