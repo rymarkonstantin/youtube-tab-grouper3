@@ -1,6 +1,7 @@
 import type { ClassificationItem, ClassificationResult, GroupRule } from "../types";
 import { canFallbackToRemote, selectProviderChain, type ClassifierConfig } from "./config";
 import { runClassificationBatches, type ClassificationBatchProgress } from "./batching";
+import { runAdaptiveClassificationBatches } from "./adaptive-batching";
 import { OllamaProviderError } from "./ollama";
 import { RemoteProviderError } from "./remote";
 import type {
@@ -53,6 +54,7 @@ export class ProviderChainClassifier {
   private onBatchProgress: NonNullable<ProviderChainClassifierOptions["onBatchProgress"]>;
   private readonly concurrency: number;
   private readonly turboMode: boolean;
+  private readonly configuredLocalModel: string;
   private providerIndex = 0;
 
   activeProviderId: ClassifierProviderId | undefined;
@@ -68,6 +70,7 @@ export class ProviderChainClassifier {
     this.onBatchProgress = options.onBatchProgress ?? (() => undefined);
     this.concurrency = options.config.concurrency;
     this.turboMode = options.config.turboMode;
+    this.configuredLocalModel = options.config.local.model;
   }
 
   async classify(
@@ -99,9 +102,43 @@ export class ProviderChainClassifier {
     rules: GroupRule[],
     fallbackRuleId: string,
   ): Promise<ClassificationResult[]> {
+    if (provider.id === "ollama") {
+      const prepared = provider.prepare
+        ? await provider.prepare(
+            {
+              rules,
+              fallbackRuleId,
+              model: this.providers.ollama === provider ? this.getLocalModel() : "",
+              schemaVersion: "classification-v1",
+              turboMode: this.turboMode,
+              ...(provider.capabilities ? { capabilities: provider.capabilities } : {}),
+            },
+            this.signal,
+          )
+        : undefined;
+      try {
+        const outcome = await runAdaptiveClassificationBatches(items, {
+          maxBatchSize: prepared?.maxBatchSize ?? provider.capabilities?.maxBatchSize ?? 12,
+          maxConcurrency: prepared?.maxConcurrency ?? provider.capabilities?.maxConcurrency ?? 1,
+          signal: this.signal,
+          isTimeout: isProviderTimeout,
+          onProgress: this.onBatchProgress,
+          classifyBatch: (batch, signal) =>
+            prepared
+              ? prepared.classifyBatch(batch, signal)
+              : provider.classify(
+                  { items: batch, rules, fallbackRuleId, turboMode: this.turboMode },
+                  signal,
+                ),
+        });
+        return outcome.results;
+      } finally {
+        prepared?.dispose();
+      }
+    }
     const outcome = await runClassificationBatches(items, {
       maxBatchSize: 4,
-      concurrency: this.concurrency,
+      concurrency: Math.min(this.concurrency, provider.capabilities?.maxConcurrency ?? 8),
       signal: this.signal,
       isTimeout: isProviderTimeout,
       onProgress: this.onBatchProgress,
@@ -112,6 +149,10 @@ export class ProviderChainClassifier {
         ),
     });
     return outcome.results;
+  }
+
+  private getLocalModel(): string {
+    return this.configuredLocalModel;
   }
 
   private async resolveProvider(): Promise<SemanticClassifierProvider> {

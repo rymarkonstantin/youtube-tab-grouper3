@@ -6,6 +6,7 @@ import {
   type SemanticClassifierProvider,
 } from "../../src/classifier/providers";
 import type { ClassificationResult } from "../../src/types";
+import type { PreparedClassificationRun } from "../../src/classifier/session";
 
 function provider(
   id: "ollama" | "remote",
@@ -231,5 +232,43 @@ describe("ProviderChainClassifier", () => {
       splitCount: 0,
       startedBatchCount: 1,
     });
+  });
+
+  it("prepares the local run once and disposes it after adaptive classification", async () => {
+    const dispose = vi.fn();
+    const classifyBatch = vi.fn(async (batch: typeof input.items) =>
+      batch.map(({ itemId }) => ({ itemId, ruleId: "uncategorized" })),
+    );
+    const local: SemanticClassifierProvider = {
+      id: "ollama",
+      capabilities: { maxConcurrency: 1, maxBatchSize: 12, supportsPreparedRuns: true },
+      health: vi.fn(async () => ({ available: true })),
+      classify: vi.fn(),
+      prepare: vi.fn(
+        async () =>
+          ({
+            rules: [],
+            fallbackRuleId: "uncategorized",
+            model: "model",
+            schemaVersion: "classification-v1",
+            maxConcurrency: 1,
+            maxBatchSize: 12,
+            classifyBatch,
+            dispose,
+          }) satisfies PreparedClassificationRun,
+      ),
+    };
+    const classifier = new ProviderChainClassifier({
+      config: createDefaultClassifierConfig(),
+      providers: { ollama: local },
+      signal: new AbortController().signal,
+    });
+
+    await classifier.classify(input.items, input.rules, input.fallbackRuleId);
+
+    expect(local.prepare).toHaveBeenCalledOnce();
+    expect(classifyBatch).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(local.classify).not.toHaveBeenCalled();
   });
 });
