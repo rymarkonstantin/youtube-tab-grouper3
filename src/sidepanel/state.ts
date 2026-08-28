@@ -44,9 +44,11 @@ export function toPanelViewModel(state: PanelState): PanelViewModel {
       return {
         heading: "Grouping YouTube tabs",
         message:
-          state.progress.classification === undefined
-            ? `Working: ${state.progress.phase}`
-            : `Working: ${state.progress.phase}. ${classificationProgressView(state.progress.classification)}`,
+          state.progress.metadata !== undefined
+            ? `Working: metadata. ${state.progress.metadata.completed}/${state.progress.metadata.total} complete`
+            : state.progress.classification === undefined
+              ? `Working: ${state.progress.phase}`
+              : `Working: ${state.progress.phase}. ${classificationProgressView(state.progress.classification)}`,
         progress: { value: state.progress.completed, max: Math.max(state.progress.total, 1) },
         prepareVisible: false,
         cancelVisible: true,

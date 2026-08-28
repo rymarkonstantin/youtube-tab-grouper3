@@ -21,3 +21,7 @@ main {
 #provider-status[data-tone="warning"] {
   color: #b3261e;
 }
+
+#metadata-progress {
+  white-space: pre-line;
+}

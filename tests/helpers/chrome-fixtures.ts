@@ -31,19 +31,21 @@ export function fakeChromeTabs(input: {
   windows: Pick<typeof chrome.windows, "get">;
   scripting: { executeScript: ReturnType<typeof vi.fn> };
 } {
-  const executeScript = vi.fn(async ({ target }: { target: { tabId: number } }) => [
-    {
-      frameId: 0,
-      result: {
-        canonicalUrl: input.tabs.find((tab) => tab.id === target.tabId)?.url,
-        title: input.tabs.find((tab) => tab.id === target.tabId)?.title,
-        description: undefined,
-        channelName: undefined,
-        hashtags: [],
-        playlistTitle: undefined,
+  const executeScript = vi.fn(
+    async ({ target }: { target: { tabId: number }; injectImmediately?: boolean }) => [
+      {
+        frameId: 0,
+        result: {
+          canonicalUrl: input.tabs.find((tab) => tab.id === target.tabId)?.url,
+          title: input.tabs.find((tab) => tab.id === target.tabId)?.title,
+          description: undefined,
+          channelName: undefined,
+          hashtags: [],
+          playlistTitle: undefined,
+        },
       },
-    },
-  ]);
+    ],
+  );
   return {
     tabs: {
       query: vi.fn(async (query: { active?: boolean }) =>

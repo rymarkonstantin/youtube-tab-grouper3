@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ClassificationCacheEntry, ClassificationCacheKey } from "../../src/cache/storage";
 import { createDefaultClassifierConfig } from "../../src/classifier/config";
 import type { ClassificationBatchProgress } from "../../src/classifier/batching";
 import { runGrouping } from "../../src/run/coordinator";
+import type { RunProgress } from "../../src/run/types";
 import {
   fakeRunDependencies,
   nonYouTubeTab,
@@ -11,6 +12,41 @@ import {
   videoTab,
 } from "../helpers/run-fixtures";
 describe("runGrouping", () => {
+  it("forwards aggregate metadata progress and counts every candidate as eligible", async () => {
+    const deps = fakeRunDependencies({
+      tabs: [videoTab(10, "good"), videoTab(20, "missing"), nonYouTubeTab(30)],
+      metadata: [videoMetadata("good", "Programming video")],
+    });
+    const values: RunProgress[] = [];
+
+    const summary = await runGrouping(deps, {
+      ...runOptions(),
+      onProgress: (value) => values.push(value),
+    });
+
+    expect(values).toContainEqual(
+      expect.objectContaining({
+        phase: "metadata",
+        completed: 2,
+        total: 2,
+        metadata: expect.objectContaining({ enriched: 1, failed: 1 }),
+      }),
+    );
+    expect(summary).toMatchObject({ eligible: 2, skipped: 1, failed: 1 });
+  });
+
+  it("does not classify or mutate after metadata cancellation", async () => {
+    const deps = fakeRunDependencies({ tabs: [videoTab(10, "cancelled")] });
+    deps.tabs.collectMetadata = vi.fn(async (_tabs, options) => {
+      options.signal.throwIfAborted();
+      throw new DOMException("Aborted", "AbortError");
+    });
+
+    await expect(runGrouping(deps, runOptions())).rejects.toMatchObject({ name: "AbortError" });
+    expect(deps.classifier.classify).not.toHaveBeenCalled();
+    expect(deps.groups.groupTabs).not.toHaveBeenCalled();
+  });
+
   it("makes no AI or group calls when no eligible videos exist", async () => {
     const deps = fakeRunDependencies({ tabs: [nonYouTubeTab(1)] });
     const summary = await runGrouping(deps, runOptions());

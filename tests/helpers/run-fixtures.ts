@@ -4,6 +4,7 @@ import type { ClassificationResult, VideoMetadata } from "../../src/types";
 import type { GroupsPort } from "../../src/chrome/groups";
 import type { TabsPort, TabMetadataResult } from "../../src/chrome/tabs";
 import type { TabSnapshot } from "../../src/grouping/types";
+import { parseYouTubeVideoUrl } from "../../src/metadata/youtube-url";
 import type { RunDependencies, RunOptions } from "../../src/run/types";
 export interface FakeRunInput {
   tabs?: TabSnapshot[];
@@ -73,14 +74,35 @@ export function fakeRunDependencies(input: FakeRunInput = {}): RunDependencies &
   const tabPort: TabsPort = {
     captureCurrentNormalWindow: vi.fn(async () => 1),
     queryWindowTabs: vi.fn(async () => tabs),
-    collectMetadata: vi.fn(async () =>
-      tabs
-        .filter((tab) => metadata.some((entry) => tab.url?.includes(`v=${entry.videoId}`)))
-        .map((tab): TabMetadataResult => {
-          const value = metadata.find((entry) => tab.url?.includes(`v=${entry.videoId}`));
-          return value ? { ok: true, tab, metadata: value } : { ok: false, tab, error: "missing" };
-        }),
-    ),
+    collectMetadata: vi.fn(async (_tabs, options) => {
+      const candidates = tabs.filter(
+        (snapshot) => !snapshot.pinned && parseYouTubeVideoUrl(snapshot.url ?? "") !== null,
+      );
+      const results = candidates.map((snapshot): TabMetadataResult => {
+        const value = metadata.find((entry) => snapshot.url?.includes(`v=${entry.videoId}`));
+        return value
+          ? { ok: true, tab: snapshot, metadata: value, source: "page" }
+          : { ok: false, tab: snapshot, reason: "no-usable-title" };
+      });
+      const enriched = results.filter((result) => result.ok && result.source === "page").length;
+      const titleOnly = results.filter(
+        (result) => result.ok && result.source === "tab-title",
+      ).length;
+      const failed = results.length - enriched - titleOnly;
+      options.onProgress({
+        total: results.length,
+        completed: results.length,
+        enriched,
+        titleOnly,
+        failed,
+        timedOut: 0,
+        active: 0,
+        elapsedMs: 0,
+        etaMs: 0,
+        budgetExhausted: false,
+      });
+      return results;
+    }),
     getTab: vi.fn(async (id) => {
       const tab = tabs.find((value) => value.id === id);
       if (!tab) throw new Error("missing");

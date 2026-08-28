@@ -29,10 +29,10 @@ describe("classifier performance and release documentation", () => {
       "PATCH",
       "MINOR",
       "MAJOR",
-      "Documentation-only, test-only, and development-only changes",
+      "Every merge to `main` requires a version bump",
       "Every uploaded Chrome package",
       "`package.json` is the release source of truth",
-      "current release version is `0.3.0`",
+      "current release version is `0.3.1`",
       "never includes titles",
     ]) {
       expect(readme).toContain(requiredText);
