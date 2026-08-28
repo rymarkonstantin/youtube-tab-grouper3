@@ -169,6 +169,8 @@ async function renderRemoteStatus(): Promise<void> {
   }
   const permission = document.querySelector<HTMLButtonElement>("#request-remote-permission");
   if (permission) permission.hidden = !view.remoteNeedsPermission;
+  const concurrencyMessage = document.querySelector<HTMLElement>("#concurrency-help");
+  if (concurrencyMessage) concurrencyMessage.textContent = view.concurrencyMessage;
 }
 
 function renderClassifierSettings(): void {

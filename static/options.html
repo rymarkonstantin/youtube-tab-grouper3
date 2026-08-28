@@ -83,9 +83,11 @@
           <input id="concurrency" type="number" min="1" max="8" step="1" inputmode="numeric" />
         </label>
         <p>
-          Use 1–8 concurrent batches for local or remote classification. This changes scheduling
+          The provider determines the effective worker count. Local Ollama uses one adaptive worker;
+          remote classification can use the configured bounded concurrency. This changes scheduling
           only and does not alter semantic cache fingerprints.
         </p>
+        <p id="concurrency-help" aria-live="polite"></p>
         <div>
           <button id="save-classifier" type="button">Save classifier settings</button>
           <button id="restore-classifier" type="button">Restore classifier defaults</button>

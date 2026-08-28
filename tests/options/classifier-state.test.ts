@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultClassifierConfig } from "../../src/classifier/config";
-import { classifierSettingsCacheImpact } from "../../src/options/classifier-state";
+import {
+  classifierConcurrencyMessage,
+  classifierSettingsCacheImpact,
+  classifierSettingsView,
+} from "../../src/options/classifier-state";
 
 describe("classifier settings cache impact", () => {
   it("preserves semantic cache entries for a concurrency-only setting change", () => {
@@ -19,5 +23,21 @@ describe("classifier settings cache impact", () => {
     expect(classifierSettingsCacheImpact(before, after)).toEqual({
       clearClassificationCache: true,
     });
+  });
+
+  it("does not advertise configured parallel workers for local Ollama", () => {
+    expect(classifierConcurrencyMessage("local-only", 8)).toContain("one adaptive worker");
+    expect(classifierConcurrencyMessage("local-only", 8)).not.toContain("8 concurrent");
+    expect(
+      classifierSettingsView(
+        { ...createDefaultClassifierConfig(), mode: "local-only", concurrency: 8 },
+        false,
+      ).concurrencyMessage,
+    ).toContain("one adaptive worker");
+  });
+
+  it("keeps bounded concurrency visible for remote providers", () => {
+    expect(classifierConcurrencyMessage("remote-only", 4)).toContain("up to 4 concurrent batches");
+    expect(classifierConcurrencyMessage("automatic", 4)).toContain("remote fallback");
   });
 });

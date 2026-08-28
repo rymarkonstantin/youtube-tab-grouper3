@@ -132,9 +132,18 @@ characters, description 600, channel 100, six hashtags of 60 characters, and pla
 and request an optional short reason. Turbo changes prompt size only; it does not change the
 taxonomy or enable parallel processing.
 
-**Concurrent batches** accepts an integer from **1 through 8** and defaults to 1 (sequential
-processing). The provider chain schedules bounded batches of **at most four items** and preserves
-the original item order. The same concurrency limit applies to local and remote providers.
+**Concurrent batches** accepts an integer from **1 through 8** and defaults to 1. The setting is
+provider-aware: local Ollama reports one effective worker and uses adaptive serial batches, so a
+higher configured value never falsely promises local parallel inference. Remote classification
+retains the configured bounded worker limit. Every provider preserves the original item order.
+
+Local Ollama prepares one run-scoped prompt/rule context, keeps the selected model warm with
+`keep_alive`, and sends independent stateless batches rather than growing conversational history.
+The initial request contains at most four items; adaptive batch size starts at 4, grows after
+complete successful batches, and shrinks after timeout or malformed output within the documented
+1–12 bounds. Cached semantic decisions are reused when
+their provider/model/schema/input fingerprint is unchanged; scheduling settings such as
+concurrency do not invalidate them.
 
 If a batch times out, the chain uses **recursive timeout splitting** (`4 → 2 → 1`) and isolates a
 single-item failure so successful items can still be grouped. Incomplete responses use

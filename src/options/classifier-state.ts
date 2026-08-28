@@ -4,6 +4,7 @@ export interface ClassifierSettingsView {
   remoteCanBeUsed: boolean;
   remoteNeedsPermission: boolean;
   remoteMessage: string;
+  concurrencyMessage: string;
 }
 
 export interface ClassifierSettingsCacheImpact {
@@ -38,11 +39,13 @@ export function classifierSettingsView(
   config: ClassifierConfig,
   hasRemotePermission: boolean,
 ): ClassifierSettingsView {
+  const concurrencyMessage = classifierConcurrencyMessage(config.mode, config.concurrency);
   if (config.mode === "local-only") {
     return {
       remoteCanBeUsed: false,
       remoteNeedsPermission: false,
       remoteMessage: "Remote fallback is disabled while Local only is selected.",
+      concurrencyMessage,
     };
   }
   if (!config.remote.enabled) {
@@ -53,6 +56,7 @@ export function classifierSettingsView(
         config.mode === "remote-only"
           ? "Enable remote classification before using Remote only."
           : "Remote fallback is disabled. No metadata will be sent remotely.",
+      concurrencyMessage,
     };
   }
   if (!hasRemoteCredentials(config)) {
@@ -60,6 +64,7 @@ export function classifierSettingsView(
       remoteCanBeUsed: false,
       remoteNeedsPermission: false,
       remoteMessage: "Enter a remote endpoint, model, and API key before enabling fallback.",
+      concurrencyMessage,
     };
   }
   if (!hasRemotePermission) {
@@ -67,6 +72,7 @@ export function classifierSettingsView(
       remoteCanBeUsed: false,
       remoteNeedsPermission: true,
       remoteMessage: "Allow access to the configured remote endpoint before enabling fallback.",
+      concurrencyMessage,
     };
   }
   return {
@@ -74,5 +80,18 @@ export function classifierSettingsView(
     remoteNeedsPermission: false,
     remoteMessage:
       "Remote fallback is configured and can receive video metadata if local Ollama fails.",
+    concurrencyMessage,
   };
+}
+
+/** Explains the effective worker limit without implying that local Ollama can parallelize. */
+export function classifierConcurrencyMessage(
+  mode: ClassifierConfig["mode"],
+  configuredConcurrency: number,
+): string {
+  if (mode === "local-only")
+    return "Local Ollama uses one adaptive worker; the setting is kept for remote mode only.";
+  if (mode === "automatic")
+    return `Local Ollama uses one adaptive worker; if remote fallback is used, it may run up to ${configuredConcurrency} concurrent batches.`;
+  return `Remote classification may run up to ${configuredConcurrency} concurrent batches.`;
 }
