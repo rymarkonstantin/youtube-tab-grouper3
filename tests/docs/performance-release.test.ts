@@ -32,8 +32,7 @@ describe("classifier performance and release documentation", () => {
       "Documentation-only, test-only, and development-only changes",
       "Every uploaded Chrome package",
       "`package.json` is the release source of truth",
-      "development version remains `0.2.0`",
-      "`0.2.1` only when packaged for distribution",
+      "current release version is `0.3.0`",
       "never includes titles",
     ]) {
       expect(readme).toContain(requiredText);
@@ -42,6 +41,5 @@ describe("classifier performance and release documentation", () => {
 
   it("marks the addendum specification implemented after the release work", () => {
     expect(spec).toContain("**Status:** Implemented");
-    expect(spec).toContain("0.2.0");
   });
 });

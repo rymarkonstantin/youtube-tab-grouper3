@@ -7,7 +7,7 @@ remains **Approved for planning** until the Bundle 13 pull request is merged and
 validation passes. A follow-up documentation commit should then change the status to Implemented
 and record the merge commit, as required by the implementation plan.
 
-The development/package version remains `0.2.0`; no distribution package was requested. The
+The release version is `0.3.0`, a MINOR increment for the new adaptive Ollama capability. The
 version increment policy is documented in `README.md` and `AGENTS.md`.
 
 ## Validation coverage
@@ -25,7 +25,7 @@ version increment policy is documented in `README.md` and `AGENTS.md`.
   — 1 file, 5 tests passed; Vitest test duration 12 ms (total command duration 282 ms).
 - Full gate: `npm run validate` — passed on 2026-08-28: 41 test files / 224 tests, formatting,
   lint, typecheck, build, and distribution checks all passed.
-- `dist/manifest.json`: inspect after build for Manifest V3, version `0.2.0`, and only approved
+- `dist/manifest.json`: inspect after build for Manifest V3, version `0.3.0`, and only approved
   permissions; `npm run check:dist` performs the automated distribution checks.
 - Secret scan: inspect tracked source and generated `dist/` for API keys, bearer tokens, private
   keys, and unrelated credentials; configuration field names and test placeholders are expected.

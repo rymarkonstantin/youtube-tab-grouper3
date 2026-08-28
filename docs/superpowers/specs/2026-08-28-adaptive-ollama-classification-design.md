@@ -1,7 +1,7 @@
 # YouTube Tab Grouper 3 — Adaptive Ollama Classification
 
 **Date:** 2026-08-28
-**Status:** Approved for planning
+**Status:** Implemented; merged through Bundles 11–13 (PRs #27–#29; merge commit `3201db6`)
 
 ## Goal
 
