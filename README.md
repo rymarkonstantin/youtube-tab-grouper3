@@ -139,8 +139,9 @@ retains the configured bounded worker limit. Every provider preserves the origin
 
 Local Ollama prepares one run-scoped prompt/rule context, keeps the selected model warm with
 `keep_alive`, and sends independent stateless batches rather than growing conversational history.
-Batch size starts at 4, grows after complete successful batches, and shrinks after timeout or
-malformed output within the documented 1–12 bounds. Cached semantic decisions are reused when
+The initial request contains at most four items; adaptive batch size starts at 4, grows after
+complete successful batches, and shrinks after timeout or malformed output within the documented
+1–12 bounds. Cached semantic decisions are reused when
 their provider/model/schema/input fingerprint is unchanged; scheduling settings such as
 concurrency do not invalidate them.
 
