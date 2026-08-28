@@ -85,6 +85,8 @@ result rather than an unmerged branch.
 - [ ] Add failing tests for growth after successful batches, reduction after timeout/malformed output, serial local execution, stable ordering, and cancellation.
 - [ ] Run the focused scheduler tests and verify failure.
 - [ ] Implement token/item-bounded adaptive sizing with minimum 1, initial 4, maximum 12, and recursive recovery.
+- [ ] Integrate prepared provider runs into the normal provider chain: call `prepare` once after
+  provider selection, schedule through the returned run, and always call `dispose` in `finally`.
 - [ ] Use the provider-reported capability limit as the effective concurrency; the current Ollama
   capability is serial (`1`), while remote providers retain the configured bounded worker count.
 - [ ] Make growth/reduction deterministic and expose the effective batch size, completed count,

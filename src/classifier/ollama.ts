@@ -4,12 +4,19 @@ import { MalformedClassificationResponseError } from "./errors";
 import { buildBatchPrompt, buildClassifierSystemPrompt } from "./prompt";
 import type { ClassifierInput, ProviderHealth, SemanticClassifierProvider } from "./providers";
 import {
+  createPreparedClassificationRun,
+  DEFAULT_LOCAL_PROVIDER_CAPABILITIES,
+  type PreparedClassificationRun,
+  type PreparedRunContext,
+} from "./session";
+import {
   createClassificationResponseSchema,
   parseClassificationResponse,
   parsePartialClassificationResponse,
 } from "./response";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const KEEP_ALIVE = "10m";
 
 export type OllamaProviderErrorCode =
   | "unavailable"
@@ -40,6 +47,7 @@ export interface OllamaClassifierProviderOptions extends LocalClassifierConfig {
 
 export class OllamaClassifierProvider implements SemanticClassifierProvider {
   readonly id = "ollama" as const;
+  readonly capabilities = DEFAULT_LOCAL_PROVIDER_CAPABILITIES;
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
@@ -102,6 +110,65 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
     }
   }
 
+  async prepare(
+    context: PreparedRunContext,
+    signal: AbortSignal,
+  ): Promise<PreparedClassificationRun> {
+    if (signal.aborted) throw abortError(signal);
+    const enabledRules = context.rules.filter(({ enabled }) => enabled);
+    const systemPrompt = buildClassifierSystemPrompt(enabledRules, context.fallbackRuleId, {
+      turboMode: context.turboMode === true,
+    });
+
+    return createPreparedClassificationRun({
+      ...context,
+      rules: enabledRules,
+      capabilities: this.capabilities,
+      classifyBatch: (input, batchSignal) =>
+        this.classifyPreparedBatch(input, systemPrompt, batchSignal),
+    });
+  }
+
+  private async classifyPreparedBatch(
+    input: Parameters<NonNullable<PreparedRunContext["classifyBatch"]>>[0],
+    systemPrompt: string,
+    signal: AbortSignal,
+  ): Promise<ClassificationResult[]> {
+    const itemIds = input.items.map(({ itemId }) => itemId);
+    const enabledRuleIds = input.rules.filter(({ enabled }) => enabled).map(({ id }) => id);
+    const body = {
+      model: input.model,
+      stream: false,
+      keep_alive: KEEP_ALIVE,
+      format: createClassificationResponseSchema(itemIds, enabledRuleIds),
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: buildBatchPrompt(input.items, { turboMode: input.turboMode === true }),
+        },
+      ],
+    };
+    const content = await this.request(
+      "/api/chat",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      signal,
+      readChatContent,
+    );
+    const enabledRuleIdSet = new Set(enabledRuleIds);
+    try {
+      return parseClassificationResponse(content, itemIds, enabledRuleIdSet);
+    } catch (error) {
+      if (error instanceof MalformedClassificationResponseError)
+        return parsePartialClassificationResponse(content, itemIds, enabledRuleIdSet);
+      throw error;
+    }
+  }
+
   private async requestClassificationContent(
     input: ClassifierInput,
     enabledRules: GroupRule[],
@@ -111,6 +178,7 @@ export class OllamaClassifierProvider implements SemanticClassifierProvider {
     const body = {
       model: this.model,
       stream: false,
+      keep_alive: KEEP_ALIVE,
       format: createClassificationResponseSchema(
         itemIds,
         enabledRules.map(({ id }) => id),

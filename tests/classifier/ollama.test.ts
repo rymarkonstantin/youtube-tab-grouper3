@@ -3,6 +3,7 @@ import type { GroupRule } from "../../src/types";
 import type { ClassifierInput } from "../../src/classifier/providers";
 import { OllamaClassifierProvider, type OllamaProviderError } from "../../src/classifier/ollama";
 import { MalformedClassificationResponseError } from "../../src/classifier/errors";
+import type { PreparedRunContext } from "../../src/classifier/session";
 
 const rules: GroupRule[] = [
   {
@@ -201,7 +202,7 @@ describe("OllamaClassifierProvider", () => {
   });
 
   it("sends a semantic structured-output request to the configured model and endpoint", async () => {
-    const fetcher = vi.fn().mockResolvedValue(validResponse());
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(validResponse()));
     const provider = new OllamaClassifierProvider({
       endpoint: "http://127.0.0.1:11434/",
       model: "qwen2.5:3b-instruct",
@@ -354,6 +355,42 @@ describe("OllamaClassifierProvider", () => {
       hashtags: ["h".repeat(60), "two", "three", "four", "five", "six"],
       playlistTitle: "p".repeat(120),
     });
+  });
+
+  it("prepares the rule context once and keeps each Ollama request stateless", async () => {
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(validResponse()));
+    const provider = new OllamaClassifierProvider({
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:3b-instruct",
+      fetcher,
+    });
+    const context: PreparedRunContext = {
+      rules,
+      fallbackRuleId: input.fallbackRuleId,
+      model: "qwen2.5:3b-instruct",
+      schemaVersion: "classification-v1",
+      classifyBatch: async () => [],
+    };
+
+    const run = await provider.prepare(context, new AbortController().signal);
+    await run.classifyBatch(input.items, new AbortController().signal);
+    await run.classifyBatch(input.items, new AbortController().signal);
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const bodies = fetcher.mock.calls.map(
+      ([, init]) =>
+        JSON.parse(String(init?.body)) as {
+          keep_alive?: unknown;
+          messages: Array<{ role: string; content: string }>;
+        },
+    );
+    expect(bodies.map(({ keep_alive }) => keep_alive)).toEqual(["10m", "10m"]);
+    expect(bodies[0]?.messages).toHaveLength(2);
+    expect(bodies[1]?.messages).toHaveLength(2);
+    expect(bodies[0]?.messages[0]).toEqual(bodies[1]?.messages[0]);
+    expect(bodies[0]?.messages[1]?.role).toBe("user");
+    expect(bodies[1]?.messages[1]?.role).toBe("user");
+    expect(bodies[0]?.messages[1]?.content).not.toContain("results");
   });
 
   it("maps an unavailable Ollama runtime to a typed provider error", async () => {

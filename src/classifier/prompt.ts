@@ -7,7 +7,7 @@ export interface PromptOptions {
 type PromptOptionsInput = PromptOptions | boolean;
 
 export function buildClassifierSystemPrompt(
-  rules: GroupRule[],
+  rules: readonly GroupRule[],
   fallbackRuleId: string,
   options: PromptOptionsInput = {},
 ): string {
@@ -33,7 +33,10 @@ export function buildClassifierSystemPrompt(
   ].join("\n");
 }
 
-export function buildBatchPrompt(items: ClassificationItem[], options: PromptOptions = {}): string {
+export function buildBatchPrompt(
+  items: readonly ClassificationItem[],
+  options: PromptOptions = {},
+): string {
   return JSON.stringify({
     items: items.map(({ itemId, metadata }) => {
       const title = options.turboMode ? truncate(metadata.title, 200) : metadata.title;
