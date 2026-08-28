@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { RunDiagnostics } from "../src/diagnostics";
 import type { ClassificationBatchProgress } from "../src/classifier/batching";
+import type { TabMetadataResult } from "../src/metadata/collector";
+import { videoMetadata, videoTab } from "./helpers/run-fixtures";
 
 describe("RunDiagnostics", () => {
   it("records aggregate provider and phase events without browsing metadata", () => {
@@ -9,7 +11,12 @@ describe("RunDiagnostics", () => {
 
     diagnostics.startPhase("metadata");
     now += 250;
-    diagnostics.recordMetadataResult(false, new Error("Video title: private fishing trip"));
+    diagnostics.recordMetadataResult({
+      ok: false,
+      tab: videoTab(99, "private-video"),
+      reason: "no-usable-title",
+      issue: "page-unavailable",
+    });
     diagnostics.recordProviderHealth("ollama", { available: false, reason: "unavailable" });
     diagnostics.recordFallback("ollama", "remote", new Error("http://secret.example/key"));
     diagnostics.recordProviderSelected("remote");
@@ -38,6 +45,58 @@ describe("RunDiagnostics", () => {
     expect(report).not.toContain("private fishing trip");
     expect(report).not.toContain("secret.example");
     expect(report).not.toContain("fishing");
+  });
+
+  it("reports aggregate metadata counters without retaining tab metadata", () => {
+    const diagnostics = new RunDiagnostics(true);
+    diagnostics.recordMetadataProgress({
+      total: 145,
+      completed: 145,
+      enriched: 100,
+      titleOnly: 43,
+      failed: 2,
+      timedOut: 7,
+      active: 0,
+      elapsedMs: 58_000,
+      etaMs: 0,
+      budgetExhausted: true,
+    });
+    const privateTab = videoTab(99, "private-video");
+    privateTab.title = "Private fishing title - YouTube";
+    diagnostics.recordMetadataResult({
+      ok: true,
+      tab: privateTab,
+      metadata: videoMetadata("private-video", "Private fishing title"),
+      source: "tab-title",
+      issue: "budget-exhausted",
+    });
+
+    const report = diagnostics.toText();
+    expect(report).toContain("metadata items: 145; enriched: 100; title only: 43; failed: 2");
+    expect(report).toContain("metadata timeouts: 7; max active: 0; budget exhausted: yes");
+    expect(report).toContain("metadata budget fallbacks: 1");
+    expect(report).not.toContain("Private fishing title");
+    expect(report).not.toContain("private-video");
+    expect(report).not.toContain("youtube.com");
+  });
+
+  it("ignores malformed metadata issue values that contain browsing content", () => {
+    const diagnostics = new RunDiagnostics(true);
+    diagnostics.recordMetadataResult({
+      ok: false,
+      tab: videoTab(99, "private-video"),
+      reason: "Private fishing title https://youtube.com/watch?v=private-video",
+      issue: "Private channel https://youtube.com/watch?v=private-video",
+    } as unknown as TabMetadataResult);
+
+    const issues = (diagnostics as unknown as { metadataIssues: Map<string, number> })
+      .metadataIssues;
+    const report = diagnostics.toText();
+    expect([...issues.keys()]).toEqual([]);
+    expect(report).not.toContain("Private fishing title");
+    expect(report).not.toContain("Private channel");
+    expect(report).not.toContain("youtube.com");
+    expect(report).not.toContain("private-video");
   });
 
   it("does not retain a report while diagnostics are disabled", () => {

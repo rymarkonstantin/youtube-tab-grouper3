@@ -1,8 +1,31 @@
 import type { ClassifierProviderId, ProviderHealth } from "./classifier/providers";
 import type { ClassificationBatchProgress } from "./classifier/batching";
+import type {
+  MetadataCollectionProgress,
+  MetadataIssue,
+  TabMetadataResult,
+} from "./metadata/collector";
 import type { RunSummary } from "./run/types";
 
 type FailureArea = "metadata" | "classification" | "grouping";
+
+const SAFE_METADATA_ISSUES = [
+  "discarded",
+  "timeout",
+  "injection-error",
+  "stale-page",
+  "page-unavailable",
+  "budget-exhausted",
+  "no-usable-title",
+] as const satisfies readonly (MetadataIssue | "no-usable-title")[];
+
+type MetadataDiagnosticIssue = (typeof SAFE_METADATA_ISSUES)[number];
+
+function isMetadataDiagnosticIssue(value: unknown): value is MetadataDiagnosticIssue {
+  return (
+    typeof value === "string" && SAFE_METADATA_ISSUES.includes(value as MetadataDiagnosticIssue)
+  );
+}
 
 const SAFE_REASONS = new Set([
   "unavailable",
@@ -58,6 +81,9 @@ export class RunDiagnostics {
   private turboMode: boolean | undefined;
   private classificationItemCount = 0;
   private batchProgress: ClassificationBatchProgress | undefined;
+  private metadataProgress: MetadataCollectionProgress | undefined;
+  private maximumMetadataActive = 0;
+  private readonly metadataIssues = new Map<MetadataDiagnosticIssue, number>();
   private selectedProviderId: ClassifierProviderId | undefined;
   private preparationDurationMs: number | undefined;
   private summary: RunSummary | undefined;
@@ -76,9 +102,22 @@ export class RunDiagnostics {
     this.phaseStartedAt = current;
   }
 
-  recordMetadataResult(ok: boolean, error?: unknown): void {
-    if (!this.enabled || ok) return;
-    this.recordFailure("metadata", error);
+  /** Records metadata counters only; tab snapshots and video metadata never enter diagnostics. */
+  recordMetadataProgress(progress: MetadataCollectionProgress): void {
+    if (!this.enabled) return;
+    this.metadataProgress = { ...progress };
+    this.maximumMetadataActive = Math.max(this.maximumMetadataActive, progress.active);
+  }
+
+  /** Records the safe result discriminants only; this method deliberately never reads tab or metadata. */
+  recordMetadataResult(result: TabMetadataResult): void {
+    if (!this.enabled) return;
+    if (result.ok) {
+      if (result.source === "tab-title") this.recordMetadataIssue(result.issue);
+      return;
+    }
+    this.recordMetadataIssue(result.reason);
+    this.recordMetadataIssue(result.issue);
   }
 
   recordProviderHealth(providerId: ClassifierProviderId, health: ProviderHealth): void {
@@ -175,6 +214,15 @@ export class RunDiagnostics {
       lines.push(
         `classification batches: ${this.classificationBatches}; items: ${this.classificationItems}`,
       );
+    if (this.metadataProgress) {
+      lines.push(
+        `metadata items: ${this.metadataProgress.total}; enriched: ${this.metadataProgress.enriched}; title only: ${this.metadataProgress.titleOnly}; failed: ${this.metadataProgress.failed}`,
+      );
+      lines.push(
+        `metadata timeouts: ${this.metadataProgress.timedOut}; max active: ${this.maximumMetadataActive}; budget exhausted: ${this.metadataProgress.budgetExhausted ? "yes" : "no"}`,
+      );
+    }
+    this.appendMetadataIssueLines(lines);
     for (const [failure, count] of this.failures) lines.push(`${failure}: ${count}`);
     if (this.summary) {
       lines.push(
@@ -190,5 +238,26 @@ export class RunDiagnostics {
       this.phase,
       (this.phaseDurations.get(this.phase) ?? 0) + current - this.phaseStartedAt,
     );
+  }
+
+  private recordMetadataIssue(issue: unknown): void {
+    if (!isMetadataDiagnosticIssue(issue)) return;
+    this.metadataIssues.set(issue, (this.metadataIssues.get(issue) ?? 0) + 1);
+  }
+
+  private appendMetadataIssueLines(lines: string[]): void {
+    const labels: ReadonlyArray<readonly [MetadataDiagnosticIssue, string]> = [
+      ["discarded", "metadata discarded fallbacks"],
+      ["timeout", "metadata timeout fallbacks"],
+      ["injection-error", "metadata injection errors"],
+      ["stale-page", "metadata stale-page fallbacks"],
+      ["page-unavailable", "metadata page-unavailable fallbacks"],
+      ["budget-exhausted", "metadata budget fallbacks"],
+      ["no-usable-title", "metadata no-usable-title failures"],
+    ];
+    for (const [issue, label] of labels) {
+      const count = this.metadataIssues.get(issue);
+      if (count !== undefined) lines.push(`${label}: ${count}`);
+    }
   }
 }

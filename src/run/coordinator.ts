@@ -21,19 +21,22 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
   const groups = await deps.groups.queryGroups(windowId);
   const metadataResults = await deps.tabs.collectMetadata(tabs, {
     signal: options.signal,
-    onProgress: (metadata) =>
+    onProgress: (metadata) => {
+      options.diagnostics?.recordMetadataProgress(metadata);
       options.onProgress({
         phase: "metadata",
         completed: metadata.completed,
         total: metadata.total,
-      }),
+        metadata,
+      });
+    },
   });
   const successfulMetadata = metadataResults.filter(
     (result): result is Extract<typeof result, { ok: true }> => result.ok,
   );
-  for (const result of metadataResults)
-    options.diagnostics?.recordMetadataResult(result.ok, result.ok ? undefined : result.reason);
+  for (const result of metadataResults) options.diagnostics?.recordMetadataResult(result);
   let failed = metadataResults.filter((result) => !result.ok).length;
+  const eligible = metadataResults.length;
   const skipped = tabs.length - metadataResults.length;
   phase(options, "cache", successfulMetadata.length);
   const configuredProviderId = deps.classifierConfig
@@ -155,7 +158,7 @@ export async function runGrouping(deps: RunDependencies, options: RunOptions): P
     ? (revalidated.groups.find(({ ruleId }) => ruleId === rules.fallbackRuleId)?.tabIds.length ?? 0)
     : 0;
   const summary = {
-    eligible: successfulMetadata.length,
+    eligible,
     grouped: applied.groupedTabIds.length,
     cached,
     uncategorized,

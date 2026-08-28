@@ -4,6 +4,7 @@ import type { GroupsPort } from "../chrome/groups";
 import type { TabsPort } from "../chrome/tabs";
 import type { ClassifierConfig } from "../classifier/config";
 import type { RunDiagnostics } from "../diagnostics";
+import type { MetadataCollectionProgress } from "../metadata/collector";
 import type { ClassificationItem, ClassificationResult, GroupRule, RuleConfig } from "../types";
 export type RunPhase =
   | "checking"
@@ -19,6 +20,7 @@ export interface RunProgress {
   completed: number;
   total: number;
   download?: { capability: string; loaded: number };
+  metadata?: MetadataCollectionProgress;
   classification?: ClassificationBatchProgress & { configuredConcurrency: number };
 }
 export interface RunSummary {
