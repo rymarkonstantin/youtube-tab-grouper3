@@ -18,6 +18,11 @@ the currently focused normal Chrome window.
   analysis.
 - Keep the default taxonomy compact and editable, with `Uncategorized` as the deterministic
   semantic fallback. Operational failures leave affected tabs unchanged.
+- Local Ollama classification uses one effective adaptive worker and independent stateless batches;
+  configured concurrency must not be presented as local parallelism unless a tested capability
+  reports otherwise. Remote providers may retain bounded configured concurrency. The model is kept
+  warm between local batches, while semantic cache entries remain valid across scheduling-only
+  changes.
 
 ## Source of Truth
 
