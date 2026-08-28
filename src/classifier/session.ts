@@ -9,7 +9,7 @@ export interface ProviderCapabilities {
 
 export const DEFAULT_LOCAL_PROVIDER_CAPABILITIES: ProviderCapabilities = Object.freeze({
   maxConcurrency: 1,
-  maxBatchSize: 4,
+  maxBatchSize: 12,
   supportsPreparedRuns: true,
 });
 
@@ -65,7 +65,13 @@ export function createPreparedClassificationRun(
       if (signal.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
       return context.classifyBatch(
         {
-          items: items.map((item) => ({ ...item, metadata: { ...item.metadata } })),
+          items: items.map((item) => ({
+            ...item,
+            metadata: {
+              ...item.metadata,
+              ...(item.metadata.hashtags ? { hashtags: [...item.metadata.hashtags] } : {}),
+            },
+          })),
           rules,
           fallbackRuleId: context.fallbackRuleId,
           model: context.model,
