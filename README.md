@@ -5,14 +5,15 @@
 The extension and package use synchronized three-part Semantic Versioning. `PATCH` is for
 backward-compatible bug fixes, diagnostics, performance work, or small UI corrections. `MINOR`
 is for new backward-compatible user-visible capabilities; the hybrid classifier, timers,
-classifier settings, and adaptive Ollama scheduling are included in `0.3.0`. `MAJOR` is for breaking configuration or storage
+classifier settings, adaptive Ollama scheduling, and metadata-reliability improvements are included in `0.3.1`. `MAJOR` is for breaking configuration or storage
 changes, removed behavior, a higher minimum Chrome version, or material permission/privacy
-changes. Documentation-only, test-only, and development-only changes do not require a version
-bump unless they are packaged for a Chrome release. Every uploaded Chrome package must use a
-higher manifest version. `package.json` is the release source of truth. Validation fails if the
-manifest version diverges.
+changes. Every merge to `main` requires a version bump: use PATCH for ordinary compatible bundles
+unless an approved release plan requires MINOR or MAJOR. Every uploaded Chrome package must use a
+higher manifest version. `package.json` is the release source of truth, and `package-lock.json`
+and `static/manifest.json` must remain synchronized with it. Validation fails if the manifest
+version diverges.
 
-The current release version is `0.3.0`. Future compatible fixes should use a PATCH increment, and
+The current release version is `0.3.1`. Future compatible fixes should use a PATCH increment, and
 future compatible user-visible capabilities should use a MINOR increment.
 
 ## What it does
@@ -118,6 +119,28 @@ Open YouTube videos in one normal Chrome window and click the extension action. 
 
 Use **Run again** after changing tabs or settings. Repeating a run with unchanged tabs, rules, and provider settings converges to the same layout.
 
+### Metadata collection reliability
+
+Every eligible tab first gets an immediate normalized baseline from its URL and saved tab title.
+For non-discarded tabs, page enrichment uses `injectImmediately` with eight logical workers, so a
+loading page is attempted without waiting for `document_idle`. Each attempt has a 3-second soft
+deadline; after it, a usable saved tab title is used as title-only metadata. The whole phase has a
+60-second metadata budget. On budget exhaustion, queued and no-longer-awaited enrichment attempts
+resolve from their baselines, while tabs without a usable title remain unchanged.
+
+Discarded tabs remain discarded: they are never injected or awakened, and use their saved tab
+title when it is usable. A title-only result has a title-only cache fingerprint. When a later run
+obtains richer page metadata, its different fingerprint triggers reclassification instead of using
+the weaker cached decision.
+
+During metadata collection, the panel shows completed, enriched, title-only, failed, active, and
+timeout counts alongside the existing overall and current-operation timers. ETA is advisory and
+based on settled enrichment attempts; timeouts are a subset of completed results. If the budget is
+reached, the panel explains that remaining tabs are resolving from saved titles. Cancellation stops
+the run before classification or grouping, and late page results are ignored. The 60-second limit
+is a logical application deadline: a blocked browser event loop can delay timers, so actual elapsed
+time remains authoritative.
+
 ## Configuration
 
 Open **Edit categories** to rename, describe, recolor, reorder, enable, disable, add, or delete rules. The fallback rule cannot be deleted or disabled. **Restore defaults** resets categories and clears the cache; **Clear classification cache** removes cached decisions without changing rules.
@@ -162,18 +185,16 @@ input or output behavior.
 
 ## Diagnostics
 
-Diagnostics are disabled by default. When enabled in settings, **Copy diagnostics** appears after a run. It copies an in-memory, local-only, redacted report with aggregate phase durations, provider health/selection/fallback, batch counts, failure categories, and run totals.
+Diagnostics are disabled by default. When enabled in settings, **Copy diagnostics** appears after a run. It copies an in-memory, local-only, redacted report with aggregate phase durations, provider health/selection/fallback, batch counts, failure categories, and run totals. Metadata diagnostics include candidate, enriched, title-only, timeout, injection-error, budget-fallback, no-title, maximum-logical-active, duration, and budget-exhausted counts.
 
-The report never includes titles, descriptions, channels, URLs, prompts, responses, token counts,
-API keys, reasons, or raw exception payloads. It is not uploaded and is cleared when the side panel
-closes. Console traces are likewise aggregate and sanitized.
+The report never includes titles, URLs, or tab IDs; console traces follow the same rule. Copied diagnostics contain no titles, URLs, or tab IDs. Neither includes descriptions, channels, prompts, responses, token counts, API keys, reasons, or raw exception payloads. They are aggregate, sanitized, not uploaded, and cleared when the side panel closes.
 
 ## Page and edge-case behavior
 
 - `/watch`, Shorts, live URLs, duplicate video tabs, and watch URLs with playlist parameters are eligible.
 - Home, search, channel, standalone playlist, and other non-video YouTube pages remain untouched.
 - Non-YouTube tabs are never moved.
-- Loading or discarded tabs use available stable tab/title metadata; a tab that closes or navigates during a run is skipped safely.
+- Loading tabs are injected immediately when possible; discarded tabs remain asleep and use a valid saved title only. A tab that closes or navigates during a run is skipped safely.
 - Pinned YouTube tabs remain pinned and ungrouped.
 - Only tabs captured from the focused normal Chrome window are processed; incognito is prohibited by the manifest.
 - If no configured provider is available, or a provider fails for the current batch, the extension performs zero grouping mutations for that unclassified work.
@@ -185,6 +206,7 @@ closes. Console traces are likewise aggregate and sanitized.
 - **Model missing:** pull the model name shown in the side panel, or change the local model setting to one already installed in Ollama.
 - **Remote fallback is unavailable:** verify that remote classification is enabled, endpoint/model/API key are filled in, and grant the exact-origin permission with **Allow remote endpoint**. Use HTTPS for non-loopback services.
 - **A run leaves tabs unchanged:** inspect the side-panel provider status; operational failures deliberately do not force a weak category or mutate groups.
+- **Metadata progress is slow or shows title-only results:** a page that does not enrich within three seconds falls back to its saved title. The complete phase resolves within the 60-second metadata budget unless the browser event loop itself is blocked; tabs with no usable title remain unchanged.
 - **Unexpected grouping result after a settings change:** run again. Provider/model changes intentionally invalidate cached classifications.
 
 ## Known limitations
@@ -193,10 +215,13 @@ Ollama must be installed and a suitable model must be downloaded separately; mod
 
 There is no bundled offline model and no automated browser-level test for native Chrome tab-group behavior. Chrome itself must be used to verify group behavior, optional permission prompts, and provider connectivity.
 
+The metadata deadlines bound what the extension awaits, not Chrome's underlying page-script work.
+Chrome can settle an abandoned injection later, but its result cannot update a cancelled, timed-out,
+or budget-exhausted run.
+
 ## Manual acceptance checklist
 
-Run the manual matrix with **2, 13, and 180+ eligible tabs** using a CPU-local Ollama model. For
-each size, verify small batches complete, progress remains understandable, cached classifications
+Manual Chrome acceptance remains pending for the Bundle 14 build. Test 2, 13, and 180+ eligible tabs, plus a 145-tab metadata-reliability case, using a CPU-local Ollama model. For each size, verify small batches complete, progress remains understandable, cached classifications
 are skipped, timed-out batches split, failed tabs remain unchanged, and unrelated tabs/groups are
 untouched. Also verify local-only grouping with `qwen2.5:3b-instruct`; unavailable Ollama causes no
 mutation; Automatic mode falls back once only after a configured remote permission grant; Remote
@@ -205,6 +230,9 @@ English topics (`.NET Aspire`, perch crankbaits, Canon EOS R6), Russian/Belarusi
 metadata, Shorts/live/watch-playlist URLs, non-video pages untouched, discarded/loading/navigation
 races, pinned tabs, duplicate tabs, preserved user groups, clean managed-group reuse, Uncategorized
 fallback, rapid repeated invocation, deterministic second runs, and category edit/reorder/disable/
-restore/cache clear.
+restore/cache clear. For the 145-tab case, include complete, loading, discarded, duplicate, and
+unsupported tabs; verify visible metadata progress, completion near the logical budget, title-only
+fallback, cancellation, ignored late results, cache convergence, and preserved pinned, unsupported,
+non-YouTube, and unrelated grouped tabs.
 
 Record manual Chrome results in the release handoff. If Chrome cannot be launched in the development environment, perform this checklist locally before release.

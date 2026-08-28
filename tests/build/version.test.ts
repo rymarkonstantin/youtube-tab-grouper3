@@ -12,9 +12,15 @@ describe("release version", () => {
     const manifest = JSON.parse(readFileSync(resolve(root, "static/manifest.json"), "utf8")) as {
       version?: unknown;
     };
+    const lockfile = JSON.parse(readFileSync(resolve(root, "package-lock.json"), "utf8")) as {
+      version?: unknown;
+      packages?: { ""?: { version?: unknown } };
+    };
 
-    expect(packageJson.version).toBe("0.3.0");
+    expect(packageJson.version).toBe("0.3.1");
     expect(manifest.version).toBe(packageJson.version);
+    expect(lockfile.version).toBe(packageJson.version);
+    expect(lockfile.packages?.[""]?.version).toBe(packageJson.version);
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

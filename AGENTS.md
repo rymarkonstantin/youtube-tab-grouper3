@@ -1,8 +1,8 @@
 # YouTube Tab Grouper 3 Agent Guide
 
-This repository contains the standalone `youtube-tab-grouper3` Chrome extension. The product
-semantically classifies YouTube video tabs with Chrome's on-device AI and groups eligible tabs in
-the currently focused normal Chrome window.
+This repository contains the standalone `youtube-tab-grouper3` Chrome extension. The product uses
+local-first Ollama semantic classification, with an explicitly enabled optional remote provider,
+to group eligible YouTube video tabs in the currently focused normal Chrome window.
 
 ## Product Boundary
 
@@ -13,9 +13,10 @@ the currently focused normal Chrome window.
   page types untouched.
 - Classify by primary subject matter. Categories are persistent semantic descriptions, not a
   manually maintained keyword dictionary.
-- Use Chrome's built-in on-device AI APIs. Do not add cloud classifiers, API keys, telemetry,
-  analytics, media downloads, audio inspection, transcription, comments scraping, or recommendation
-  analysis.
+- Use the configured local-first Ollama classifier by default. An optional remote provider must be
+  explicitly configured, enabled, and granted only its exact runtime origin permission. Do not add
+  unapproved providers, telemetry, analytics, media downloads, audio inspection, transcription,
+  comments scraping, or recommendation analysis.
 - Keep the default taxonomy compact and editable, with `Uncategorized` as the deterministic
   semantic fallback. Operational failures leave affected tabs unchanged.
 - Local Ollama classification uses one effective adaptive worker and independent stateless batches;
@@ -29,32 +30,39 @@ the currently focused normal Chrome window.
 Use this priority order when making decisions:
 
 1. The current user request and explicit approvals.
-2. The approved design specification at
+2. The approved focused specification and plan for the current work, which supersede the base
+   documents only within their explicit scope.
+3. The approved base design specification at
    `docs/superpowers/specs/2026-08-27-youtube-tab-grouper3-design.md`.
-3. The approved implementation plan at
+4. The approved base implementation plan at
    `docs/superpowers/plans/2026-08-27-youtube-tab-grouper3.md`.
-4. The current task and its acceptance criteria.
-5. This `AGENTS.md`.
-6. Existing implementation and tests.
-7. General assumptions.
+5. The current task and its acceptance criteria.
+6. This `AGENTS.md`.
+7. Existing implementation and tests.
+8. General assumptions.
 
 If these sources conflict, stop and explain the conflict before changing code. Do not silently
-expand the product or replace on-device semantic classification with keyword matching.
+expand the product or replace semantic classification with keyword matching.
 
 ## Architecture and Expected Stack
 
 - Chrome Manifest V3, targeting Chrome desktop 138+.
 - Strict TypeScript with plain HTML/CSS; no React or additional UI framework.
 - esbuild for fixed extension bundles, Vitest for automated tests, and Biome for formatting/linting.
-- Chrome Prompt API, Language Detector API, and Translator API behind narrow testable adapters.
+- Local Ollama and optional remote-provider adapters behind narrow testable interfaces.
 - `chrome.storage.local` for validated persistent rules and the bounded classification cache.
 - Keep pure parsing, validation, classification-response, planning, and state logic independent of
   Chrome APIs so it remains unit-testable.
 
-## Six-Bundle Delivery
+## Sequential Bundle Delivery
 
 Only one bundle branch and one pull request may be active at a time. Every bundle starts from the
 newly merged and validated `main` branch; never stack a bundle on an unmerged bundle.
+
+### Historical foundation delivery
+
+The following table applies only to historical Bundles 1–6. Later work must take its exact branch
+name and task sequence from the applicable approved focused specification and plan.
 
 | Bundle | Branch | Tasks |
 |---|---|---|
@@ -137,11 +145,11 @@ task or bundle handoff.
 - Use MINOR for new backward-compatible user-visible capabilities.
 - Use MAJOR for breaking storage/configuration/behavior changes, removed behavior, a higher Chrome
   minimum, or material permission/privacy changes.
-- Documentation-, test-, and development-only changes do not require a version bump unless they are
-  packaged for Chrome distribution.
+- Every merge to `main` requires a version bump. Use PATCH for ordinary compatible bundles unless
+  an approved release plan requires a MINOR or MAJOR increment.
 - Every uploaded Chrome package must have a higher version than the previously uploaded package.
-- Merging a bundle or pull request does not increment the version automatically; version bumps are
-  deliberate release work.
+- The current bundle must make its selected version increment before merge; version bumps are
+  deliberate work, not a post-merge follow-up.
 - Before packaging, identify the last uploaded version, choose the smallest appropriate bump, and
   update `package.json`, `package-lock.json`, and `static/manifest.json` together. Do not hand-edit
   generated `dist/` files; rebuild them from the synchronized sources.
