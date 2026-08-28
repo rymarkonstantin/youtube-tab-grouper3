@@ -113,6 +113,24 @@ describe("adaptive classification batches", () => {
     expect(result.failedItemCount).toBe(1);
   });
 
+  it("splits a multi-item provider error before recovering its items", async () => {
+    const calls: number[] = [];
+    const result = await runAdaptiveClassificationBatches(items(4), {
+      signal: new AbortController().signal,
+      maxConcurrency: 1,
+      maxBatchSize: 12,
+      isTimeout: () => false,
+      classifyBatch: async (batch) => {
+        calls.push(batch.length);
+        if (batch.length > 1) throw new Error("provider failed");
+        return batch.map(({ itemId }) => ({ itemId, ruleId: "other" }));
+      },
+    });
+    expect(calls).toEqual([4, 2, 1, 1, 2, 1, 1]);
+    expect(result.results).toHaveLength(4);
+    expect(result.failedItemCount).toBe(0);
+  });
+
   it("reports average duration and eta and stops on cancellation", async () => {
     const controller = new AbortController();
     const progress = vi.fn();
@@ -130,5 +148,9 @@ describe("adaptive classification batches", () => {
       }),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(progress.mock.calls.some(([value]) => value.averageItemDurationMs >= 0)).toBe(true);
+    const snapshot = { ...progress.mock.calls[0]?.[0] };
+    expect(snapshot).toHaveProperty("currentBatchSize");
+    expect(snapshot).toHaveProperty("averageItemDurationMs");
+    expect(snapshot).toHaveProperty("etaMs");
   });
 });

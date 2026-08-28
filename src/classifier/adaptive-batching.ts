@@ -60,13 +60,6 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
       etaMs:
         remaining === 0 || averageItemDurationMs === 0 ? null : remaining * averageItemDurationMs,
     };
-    // Keep the original aggregate progress shape compatible with existing consumers while making
-    // adaptive values available to consumers that opt into the richer fields.
-    Object.defineProperties(enhanced, {
-      currentBatchSize: { enumerable: false, value: batchSize },
-      averageItemDurationMs: { enumerable: false, value: averageItemDurationMs },
-      etaMs: { enumerable: false, value: enhanced.etaMs },
-    });
     options.onProgress?.(enhanced);
   };
 
@@ -122,7 +115,12 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
           notify();
           return false;
         }
-        throw error;
+        progress.splitCount++;
+        notify();
+        const midpoint = Math.ceil(batch.length / 2);
+        await execute(batch.slice(0, midpoint), true);
+        await execute(batch.slice(midpoint), true);
+        return true;
       }
       if (batch.length === 1) {
         if (!retry) return execute(batch, true, true);
