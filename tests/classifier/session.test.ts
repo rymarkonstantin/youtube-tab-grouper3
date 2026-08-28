@@ -7,7 +7,13 @@ import {
 import type { ClassificationItem, ClassificationResult, GroupRule } from "../../src/types";
 
 const rules: GroupRule[] = [
-  { id: "programming", name: "Programming", description: "Software development", color: "green", enabled: true },
+  {
+    id: "programming",
+    name: "Programming",
+    description: "Software development",
+    color: "green",
+    enabled: true,
+  },
 ];
 const item: ClassificationItem = {
   itemId: "item-1",
@@ -16,9 +22,12 @@ const item: ClassificationItem = {
 
 describe("prepared classification run", () => {
   it("captures rules and model identity once and exposes local serial capability", async () => {
-    const classifyBatch = vi.fn(async (_input: PreparedRunBatchInput, _signal: AbortSignal): Promise<ClassificationResult[]> => [
-      { itemId: item.itemId, ruleId: "programming" },
-    ]);
+    const classifyBatch = vi.fn(
+      async (
+        _input: PreparedRunBatchInput,
+        _signal: AbortSignal,
+      ): Promise<ClassificationResult[]> => [{ itemId: item.itemId, ruleId: "programming" }],
+    );
     const context: PreparedRunContext = {
       rules,
       fallbackRuleId: "other",
@@ -38,7 +47,13 @@ describe("prepared classification run", () => {
       { itemId: item.itemId, ruleId: "programming" },
     ]);
     expect(classifyBatch).toHaveBeenCalledWith(
-      { items: [item], rules: run.rules, fallbackRuleId: "other", model: "qwen2.5:3b-instruct", schemaVersion: "classification-v1" },
+      {
+        items: [item],
+        rules: run.rules,
+        fallbackRuleId: "other",
+        model: "qwen2.5:3b-instruct",
+        schemaVersion: "classification-v1",
+      },
       expect.any(AbortSignal),
     );
     const forwardedItem = classifyBatch.mock.calls[0]?.[0].items[0];

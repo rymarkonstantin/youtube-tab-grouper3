@@ -25,8 +25,9 @@ export interface PreparedRunContext {
   readonly fallbackRuleId: string;
   readonly model: string;
   readonly schemaVersion: string;
+  readonly turboMode?: boolean;
   readonly capabilities?: ProviderCapabilities;
-  classifyBatch(
+  classifyBatch?(
     input: PreparedRunBatchInput,
     signal: AbortSignal,
   ): Promise<ClassificationResult[]>;
@@ -49,6 +50,9 @@ export interface PreparedClassificationRun {
 export function createPreparedClassificationRun(
   context: PreparedRunContext,
 ): PreparedClassificationRun {
+  const classifyBatch = context.classifyBatch;
+  if (classifyBatch === undefined)
+    throw new Error("Prepared classification run requires a batch classifier.");
   const rules = Object.freeze(context.rules.map((rule) => Object.freeze({ ...rule })));
   const capabilities = context.capabilities ?? DEFAULT_LOCAL_PROVIDER_CAPABILITIES;
   let disposed = false;
@@ -62,8 +66,9 @@ export function createPreparedClassificationRun(
     maxBatchSize: capabilities.maxBatchSize,
     async classifyBatch(items, signal) {
       if (disposed) throw new Error("Prepared classification run has been disposed");
-      if (signal.aborted) throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
-      return context.classifyBatch(
+      if (signal.aborted)
+        throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+      return classifyBatch(
         {
           items: items.map((item) => ({
             ...item,
@@ -76,6 +81,7 @@ export function createPreparedClassificationRun(
           fallbackRuleId: context.fallbackRuleId,
           model: context.model,
           schemaVersion: context.schemaVersion,
+          ...(context.turboMode === true ? { turboMode: true } : {}),
         },
         signal,
       );

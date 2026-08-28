@@ -3,7 +3,11 @@ import { canFallbackToRemote, selectProviderChain, type ClassifierConfig } from 
 import { runClassificationBatches, type ClassificationBatchProgress } from "./batching";
 import { OllamaProviderError } from "./ollama";
 import { RemoteProviderError } from "./remote";
-import type { PreparedClassificationRun, ProviderCapabilities, PreparedRunContext } from "./session";
+import type {
+  PreparedClassificationRun,
+  ProviderCapabilities,
+  PreparedRunContext,
+} from "./session";
 
 export interface ClassifierInput {
   items: ClassificationItem[];
