@@ -20,11 +20,26 @@ export interface ClassificationProgressViewInput {
   splitCount: number;
   recoveredItemCount: number;
   failedItemCount: number;
+  currentBatchSize?: number;
+  averageItemDurationMs?: number;
+  etaMs?: number | null;
+}
+
+function formatDuration(milliseconds: number): string {
+  const bounded = Math.max(0, Math.floor(milliseconds));
+  const minutes = Math.floor(bounded / 60_000);
+  const seconds = Math.floor((bounded % 60_000) / 1_000);
+  const remainder = bounded % 1_000;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(remainder).padStart(3, "0")}`;
 }
 
 /** Formats scheduler counters only; no content from a tab or provider response is accepted. */
 export function classificationProgressView(value: ClassificationProgressViewInput): string {
-  return `Batches ${value.completedBatchCount}/${value.startedBatchCount}; items ${value.completedItemCount}; concurrency ${value.configuredConcurrency}; splits ${value.splitCount}; recovered ${value.recoveredItemCount}; failed items ${value.failedItemCount}.`;
+  const adaptive =
+    value.currentBatchSize === undefined
+      ? ""
+      : ` batch size ${value.currentBatchSize}; average item ${Math.max(0, Math.floor(value.averageItemDurationMs ?? 0))}ms; ETA ${value.etaMs === null || value.etaMs === undefined ? "unknown" : formatDuration(value.etaMs)}`;
+  return `Batches ${value.completedBatchCount}/${value.startedBatchCount}; items ${value.completedItemCount}; concurrency ${value.configuredConcurrency}; splits ${value.splitCount}; recovered ${value.recoveredItemCount}; failed items ${value.failedItemCount}.${adaptive}`;
 }
 
 /** Produces status text that does not expose endpoints, credentials, or raw provider errors. */

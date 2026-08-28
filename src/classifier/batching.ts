@@ -11,6 +11,10 @@ export interface ClassificationBatchProgress {
   splitCount: number;
   recoveredItemCount: number;
   failedItemCount: number;
+  currentBatchSize?: number;
+  averageItemDurationMs?: number;
+  etaMs?: number | null;
+  preparationDurationMs?: number;
 }
 
 export interface ClassificationBatchOptions<T extends ClassificationBatchItem> {

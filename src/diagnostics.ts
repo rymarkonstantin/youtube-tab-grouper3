@@ -22,6 +22,10 @@ function formatDuration(milliseconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(remainder).padStart(3, "0")}`;
 }
 
+function formatDiagnosticDuration(milliseconds: number): string {
+  return formatDuration(milliseconds);
+}
+
 export function redactDiagnosticReason(value: unknown): string {
   if (
     typeof value === "object" &&
@@ -55,6 +59,7 @@ export class RunDiagnostics {
   private classificationItemCount = 0;
   private batchProgress: ClassificationBatchProgress | undefined;
   private selectedProviderId: ClassifierProviderId | undefined;
+  private preparationDurationMs: number | undefined;
   private summary: RunSummary | undefined;
 
   constructor(
@@ -112,6 +117,11 @@ export class RunDiagnostics {
     this.batchProgress = { ...progress };
   }
 
+  /** Records preparation timing only; prompts and metadata never enter diagnostics. */
+  recordPreparation(milliseconds: number): void {
+    if (this.enabled) this.preparationDurationMs = Math.max(0, Math.floor(milliseconds));
+  }
+
   recordFailure(area: FailureArea, reason: unknown): void {
     if (!this.enabled) return;
     const key = `${area}:${redactDiagnosticReason(reason)}`;
@@ -147,6 +157,20 @@ export class RunDiagnostics {
       lines.push(
         `splits: ${this.batchProgress.splitCount}; recovered: ${this.batchProgress.recoveredItemCount}; failed items: ${this.batchProgress.failedItemCount}`,
       );
+      if (this.preparationDurationMs !== undefined)
+        lines.push(
+          `classification preparation: ${formatDiagnosticDuration(this.preparationDurationMs)}`,
+        );
+      if (this.batchProgress.currentBatchSize !== undefined) {
+        const average = Math.max(0, Math.floor(this.batchProgress.averageItemDurationMs ?? 0));
+        const eta =
+          this.batchProgress.etaMs === null || this.batchProgress.etaMs === undefined
+            ? "unknown"
+            : formatDiagnosticDuration(this.batchProgress.etaMs);
+        lines.push(
+          `adaptive batch: size ${this.batchProgress.currentBatchSize}; average item: ${average}ms; eta: ${eta}`,
+        );
+      }
     } else if (this.classificationBatches > 0)
       lines.push(
         `classification batches: ${this.classificationBatches}; items: ${this.classificationItems}`,

@@ -169,4 +169,43 @@ describe("runGrouping", () => {
       }),
     );
   });
+
+  it("forwards adaptive timing progress without exposing metadata", async () => {
+    const deps = fakeRunDependencies({
+      tabs: [videoTab(10, "video-a")],
+      metadata: [videoMetadata("video-a", "Private title")],
+    });
+    let notify: ((progress: ClassificationBatchProgress) => void) | undefined;
+    const providerAware = deps.classifier as typeof deps.classifier & {
+      setBatchProgressListener(listener: (progress: ClassificationBatchProgress) => void): void;
+    };
+    providerAware.setBatchProgressListener = (listener) => {
+      notify = listener;
+    };
+    providerAware.classify.mockImplementation(async (items: Array<{ itemId: string }>) => {
+      notify?.({
+        startedBatchCount: 1,
+        completedBatchCount: 1,
+        completedItemCount: 1,
+        splitCount: 0,
+        recoveredItemCount: 0,
+        failedItemCount: 0,
+        currentBatchSize: 4,
+        averageItemDurationMs: 100,
+        etaMs: 0,
+      } as ClassificationBatchProgress);
+      return items.map(({ itemId }) => ({ itemId, ruleId: "uncategorized" }));
+    });
+    const progress: Array<Record<string, unknown>> = [];
+    await runGrouping(deps, {
+      ...runOptions(),
+      onProgress: (value) => progress.push(value as never),
+    });
+    expect(progress).toContainEqual(
+      expect.objectContaining({
+        phase: "classifying",
+        classification: expect.objectContaining({ currentBatchSize: 4, etaMs: 0 }),
+      }),
+    );
+  });
 });
