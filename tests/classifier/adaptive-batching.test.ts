@@ -80,6 +80,39 @@ describe("adaptive classification batches", () => {
     expect(peak).toBe(1);
   });
 
+  it("retries an incomplete singleton once, then records it as failed", async () => {
+    let calls = 0;
+    const result = await runAdaptiveClassificationBatches(items(1), {
+      signal: new AbortController().signal,
+      maxConcurrency: 1,
+      maxBatchSize: 12,
+      isTimeout: () => false,
+      classifyBatch: async () => {
+        calls++;
+        return [];
+      },
+    });
+    expect(calls).toBe(2);
+    expect(result.failedItemCount).toBe(1);
+    expect(result.results).toEqual([]);
+  });
+
+  it("retries a recoverable singleton provider error once", async () => {
+    let calls = 0;
+    const result = await runAdaptiveClassificationBatches(items(1), {
+      signal: new AbortController().signal,
+      maxConcurrency: 1,
+      maxBatchSize: 12,
+      isTimeout: () => false,
+      classifyBatch: async () => {
+        calls++;
+        throw new Error("transport failed");
+      },
+    });
+    expect(calls).toBe(2);
+    expect(result.failedItemCount).toBe(1);
+  });
+
   it("reports average duration and eta and stops on cancellation", async () => {
     const controller = new AbortController();
     const progress = vi.fn();

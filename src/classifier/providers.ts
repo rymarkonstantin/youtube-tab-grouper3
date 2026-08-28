@@ -102,7 +102,7 @@ export class ProviderChainClassifier {
     rules: GroupRule[],
     fallbackRuleId: string,
   ): Promise<ClassificationResult[]> {
-    if (provider.id === "ollama") {
+    if (provider.id === "ollama" && provider.capabilities?.supportsPreparedRuns === true) {
       const prepared = provider.prepare
         ? await provider.prepare(
             {

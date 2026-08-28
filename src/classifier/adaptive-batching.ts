@@ -103,6 +103,12 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
       }
       successfulBatches = 0;
       batchSize = Math.max(MIN_BATCH_SIZE, Math.floor(batchSize / 2));
+      if (batch.length === 1) {
+        if (!retry) return execute(batch, true, true);
+        progress.failedItemCount++;
+        notify();
+        return false;
+      }
       for (const item of missing) await execute([item], true, false);
       return true;
     } catch (error) {
@@ -110,7 +116,8 @@ export async function runAdaptiveClassificationBatches<T extends ClassificationB
       successfulBatches = 0;
       batchSize = Math.max(MIN_BATCH_SIZE, Math.floor(batchSize / 2));
       if (!options.isTimeout(error)) {
-        if (batch.length === 1 && recovered) {
+        if (batch.length === 1) {
+          if (!retry) return execute(batch, true, true);
           progress.failedItemCount++;
           notify();
           return false;
