@@ -4,17 +4,16 @@
 
 The extension and package use synchronized three-part Semantic Versioning. `PATCH` is for
 backward-compatible bug fixes, diagnostics, performance work, or small UI corrections. `MINOR`
-is for new backward-compatible user-visible capabilities; the hybrid classifier, timers, and
-classifier settings are included in `0.2.0`. `MAJOR` is for breaking configuration or storage
+is for new backward-compatible user-visible capabilities; the hybrid classifier, timers,
+classifier settings, and adaptive Ollama scheduling are included in `0.3.0`. `MAJOR` is for breaking configuration or storage
 changes, removed behavior, a higher minimum Chrome version, or material permission/privacy
 changes. Documentation-only, test-only, and development-only changes do not require a version
 bump unless they are packaged for a Chrome release. Every uploaded Chrome package must use a
 higher manifest version. `package.json` is the release source of truth. Validation fails if the
 manifest version diverges.
 
-The current development version remains `0.2.0`. These performance and quality fixes become
-`0.2.1` only when packaged for distribution; packaging is the point at which the manifest must be
-bumped to a higher version.
+The current release version is `0.3.0`. Future compatible fixes should use a PATCH increment, and
+future compatible user-visible capabilities should use a MINOR increment.
 
 ## What it does
 

@@ -13,7 +13,7 @@ describe("release version", () => {
       version?: unknown;
     };
 
-    expect(packageJson.version).toBe("0.2.0");
+    expect(packageJson.version).toBe("0.3.0");
     expect(manifest.version).toBe(packageJson.version);
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
   });

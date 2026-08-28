@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Tab Grouper 3",
   "description": "Semantically group YouTube video tabs in the current window with a local-first classifier.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minimum_chrome_version": "138",
   "permissions": ["scripting", "sidePanel", "storage", "tabGroups"],
   "host_permissions": [

@@ -140,6 +140,15 @@ task or bundle handoff.
 - Documentation-, test-, and development-only changes do not require a version bump unless they are
   packaged for Chrome distribution.
 - Every uploaded Chrome package must have a higher version than the previously uploaded package.
+- Merging a bundle or pull request does not increment the version automatically; version bumps are
+  deliberate release work.
+- Before packaging, identify the last uploaded version, choose the smallest appropriate bump, and
+  update `package.json`, `package-lock.json`, and `static/manifest.json` together. Do not hand-edit
+  generated `dist/` files; rebuild them from the synchronized sources.
+- A release PR must run `npm run validate`, verify `dist/manifest.json` has the intended higher
+  version, and state the selected bump and its rationale in the PR description.
+- Do not claim a release is ready until the version test, build, distribution checks, and required
+  manual Chrome acceptance have been completed or explicitly recorded as pending.
 
 ## Bundle Handoff
 
